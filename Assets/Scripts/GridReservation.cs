@@ -1,38 +1,54 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Collections.Generic;
 
 public class GridReservation : MonoBehaviour
 {
-    public static HashSet<Vector3Int> occupiedCells = new HashSet<Vector3Int>();
-    public static Dictionary<Vector3Int, GameObject> objects = new Dictionary<Vector3Int, GameObject>();
+    public static HashSet<Vector3Int> reservedCells = new HashSet<Vector3Int>();
+    public static Dictionary<Vector3Int, Enemy> occupiedCells = new Dictionary<Vector3Int, Enemy>();
 
-    public static void Reserve(Vector3Int cell, GameObject obj)
+    void LateUpdate()
     {
-        occupiedCells.Add(cell);
-        objects[cell] = obj;
+        // reset à chaque frame
+        reservedCells.Clear();
     }
 
-    public static void Free(Vector3Int cell)
+    void Awake()
     {
-        occupiedCells.Remove(cell);
-        objects.Remove(cell);
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
-    public static bool IsOccupied(Vector3Int cell)
+    void OnDestroy()
     {
-        return occupiedCells.Contains(cell);
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
-    public static GameObject GetObject(Vector3Int cell)
-    {
-        objects.TryGetValue(cell, out GameObject obj);
-        return obj;
-    }
-
-    public static void ResetAll()
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         occupiedCells.Clear();
-        objects.Clear();
+    }
+
+    public static bool IsOccupied(Vector3Int pos)
+    {
+        return occupiedCells.ContainsKey(pos);
+    }
+
+    public static Enemy GetEnemyAt(Vector3Int pos)
+    {
+        if (occupiedCells.TryGetValue(pos, out Enemy e))
+            return e;
+
+        return null;
+    }
+
+    public static void Reserve(Vector3Int pos, Enemy enemy)
+    {
+        occupiedCells[pos] = enemy;
+    }
+
+    public static void Release(Vector3Int pos)
+    {
+        if (occupiedCells.ContainsKey(pos))
+            occupiedCells.Remove(pos);
     }
 }
