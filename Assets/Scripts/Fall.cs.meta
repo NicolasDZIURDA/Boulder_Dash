@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: f5d371e43e624f34d9d7f8186c0f39fd
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - tilemap: {instanceID: 0}
+  - coinPrefab: {fileID: 7338056646399330852, guid: a53e1cee16eb8c34381acbac98fc67fd, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
