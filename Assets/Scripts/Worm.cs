@@ -1,30 +1,34 @@
 using UnityEngine;
-using System.Collections.Generic;
 using UnityEngine.Tilemaps;
+using System.Collections.Generic;
 
-public class Worm : MonoBehaviour
+public class WormGrid : MonoBehaviour
 {
     public Tilemap tilemap;
     public Vector3Int moveDirection = Vector3Int.right;
+
     public float moveDelay = 0.3f;
     private float timer;
 
-    public List<Vector3> positionHistory = new List<Vector3>();
+    public List<Vector3Int> positionHistory = new List<Vector3Int>();
+
+    private Vector3Int cellPosition;
 
     void Start()
     {
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
-            
-        // initialiser la direction si le prefab n'a rien
+
         if (moveDirection == Vector3Int.zero)
             moveDirection = Vector3Int.right;
+
+        SnapToGrid();
+
+        GridManager.Instance.SetCell(cellPosition, CellType.Enemy);
     }
-    
+
     void Update()
     {
-        if (tilemap == null) return;
-
         timer += Time.deltaTime;
 
         if (timer >= moveDelay)
@@ -36,51 +40,61 @@ public class Worm : MonoBehaviour
 
     void MoveOnGrid()
     {
-        Vector3Int currentCell = tilemap.WorldToCell(transform.position);
-        Vector3Int nextCell = currentCell + new Vector3Int((int)moveDirection.x, (int)moveDirection.y, 0);
+        Vector3Int nextCell = cellPosition + moveDirection;
+        CellType target = GridManager.Instance.GetCell(nextCell);
 
-        TileBase tile = tilemap.GetTile(nextCell);
-        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(nextCell));
-        
-        if (tile != null)
+        // 🧱 bloqué
+        if (IsBlocked(target))
         {
             ChooseDirection();
             return;
         }
 
-        if (hit != null)
+        // 👾 interaction avec ennemi
+        if (target == CellType.Enemy)
         {
-            if (hit.CompareTag("Enemy"))
-            {
-                ChooseDirection();
-
-                Enemy other = hit.GetComponent<Enemy>();
-                if (other != null)
-                {
-                    other.ReverseDirection();
-                }
-                return;
-            }
-            else
-            {
-                ChooseDirection();
-                return;
-            }
+            ChooseDirection();
+            return;
         }
-        
-        positionHistory.Insert(0, transform.position); // sauvegarder position actuelle
-        transform.position = tilemap.GetCellCenterWorld(nextCell);
 
-        // (optionnel) limiter la taille de l'historique
+        // 💀 joueur
+        if (target == CellType.Player)
+        {
+            Debug.Log("Player dead");
+            return;
+        }
+
+        // ✅ déplacement
+        MoveTo(nextCell);
+    }
+
+    bool IsBlocked(CellType type)
+    {
+        return type == CellType.Wall ||
+               type == CellType.Rock ||
+               type == CellType.Dirt;
+    }
+
+    void MoveTo(Vector3Int newCell)
+    {
+        // sauvegarde historique
+        positionHistory.Insert(0, cellPosition);
+
         if (positionHistory.Count > 10)
-        {
             positionHistory.RemoveAt(positionHistory.Count - 1);
-        }
+
+        // update grid
+        GridManager.Instance.ClearCell(cellPosition);
+
+        cellPosition = newCell;
+
+        GridManager.Instance.SetCell(cellPosition, CellType.Enemy);
+
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
     }
 
     void ChooseDirection()
     {
-        // directions possibles
         Vector3Int[] directions = new Vector3Int[]
         {
             Vector3Int.up,
@@ -89,35 +103,35 @@ public class Worm : MonoBehaviour
             Vector3Int.right
         };
 
-        Vector3Int currentCell = tilemap.WorldToCell(transform.position);
-
         Vector3Int opposite = -moveDirection;
-
         List<Vector3Int> validDirections = new List<Vector3Int>();
 
-        // 🔍 chercher directions valides (sans demi-tour)
         foreach (var dir in directions)
         {
-            if (dir == opposite) continue; // ❌ éviter demi-tour
+            if (dir == opposite) continue;
 
-            Vector3Int nextCell = currentCell + dir;
-            TileBase tile = tilemap.GetTile(nextCell);
-            if (tile != null) continue;
+            Vector3Int next = cellPosition + dir;
+            CellType type = GridManager.Instance.GetCell(next);
 
-            Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(nextCell));
-            if (hit != null) continue;
+            if (IsBlocked(type)) continue;
+            if (type == CellType.Enemy) continue;
 
             validDirections.Add(dir);
         }
-        // ✅ si on peut tourner → choisir au hasard
+
         if (validDirections.Count > 0)
         {
             moveDirection = validDirections[Random.Range(0, validDirections.Count)];
         }
         else
         {
-            // 🔁 sinon → demi-tour forcé
             moveDirection = opposite;
         }
+    }
+
+    void SnapToGrid()
+    {
+        cellPosition = tilemap.WorldToCell(transform.position);
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
     }
 }

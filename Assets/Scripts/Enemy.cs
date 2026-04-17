@@ -1,14 +1,15 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
-public class Enemy : MonoBehaviour
+public class EnemyGrid : MonoBehaviour
 {
     public Vector3Int cellPosition;
     public Direction direction;
     public bool dropCoins = true;
 
-    public float moveInterval = 0.1f;
+    public float moveInterval = 0.2f;
     private float timer;
+
     public float turnCooldown = 0.1f;
     private float lastTurnTime;
 
@@ -16,19 +17,17 @@ public class Enemy : MonoBehaviour
 
     void Start()
     {
-        GridReservation.Reserve(cellPosition, this);
-
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
 
-        cellPosition = tilemap.WorldToCell(transform.position);
-        transform.position = tilemap.GetCellCenterWorld(cellPosition);
+        SnapToGrid();
+
+        GridManager.Instance.SetCell(cellPosition, CellType.Enemy);
     }
 
     void Update()
     {
         timer += Time.deltaTime;
-        //Debug.Log("Enemy : " + transform.position);
 
         if (timer >= moveInterval)
         {
@@ -43,74 +42,66 @@ public class Enemy : MonoBehaviour
         Direction right = TurnRight(direction);
         Direction back = Opposite(direction);
 
-        // priorité Boulder Dash : gauche → devant → droite → arrière
-
-        if (CanMove(left))
+        // priorité : gauche → devant → droite → arrière
+        if (TryMove(left))
         {
             direction = left;
-            Move(direction);
         }
-        else if (CanMove(direction))
+        else if (TryMove(direction))
         {
-            Move(direction);
+            // continue
         }
-        else if (CanMove(right))
+        else if (TryMove(right))
         {
             direction = right;
-            Move(direction);
         }
-        else if (CanMove(back))
+        else if (TryMove(back))
         {
             direction = back;
-            Move(direction);
         }
     }
 
-    bool CanMove(Direction dir)
+    bool TryMove(Direction dir)
     {
         Vector3Int next = cellPosition + DirToVector(dir);
-        Enemy other = GridReservation.GetEnemyAt(next);
+        CellType target = GridManager.Instance.GetCell(next);
 
-        if (other != null && other != this)
+        // 🧱 bloqué par solide
+        if (IsBlocked(target))
+            return false;
+
+        // 👾 collision avec autre ennemi
+        if (target == CellType.Enemy)
         {
             ReverseDirection();
-            other.ReverseDirection();
             return false;
         }
 
-        if (tilemap.HasTile(next))
-            return false;
-
-        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(next));
-
-        if (hit != null)
+        // 💀 touche joueur
+        if (target == CellType.Player)
         {
-            if (hit.CompareTag("Player"))
-            {
-                hit.GetComponent<Player>().Die();
-            }
-
+            Debug.Log("Player dead");
+            // appelle ton Player.Die() ici si tu as une ref
             return false;
         }
 
+        // ✅ déplacement autorisé
+        MoveTo(next);
         return true;
     }
 
-    void Move(Direction dir)
+    void MoveTo(Vector3Int newCell)
     {
-        Vector3Int next = cellPosition + DirToVector(dir);
+        // libère ancienne case
+        GridManager.Instance.ClearCell(cellPosition);
 
-        if (GridReservation.IsOccupied(next))
-            return;
-        
-        // 🔓 libérer ancienne case
-        GridReservation.Release(cellPosition);
+        cellPosition = newCell;
 
-        // 🔒 réserver nouvelle
-        GridReservation.Reserve(next, this);
+        // place dans la grille
+        GridManager.Instance.SetCell(cellPosition, CellType.Enemy);
 
-        cellPosition = next;
-        SnapToGrid();
+        // update position monde
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
 
         UpdateRotation();
     }
@@ -125,9 +116,8 @@ public class Enemy : MonoBehaviour
 
     void SnapToGrid()
     {
-        // centre de la cellule
-        Vector3 worldPos = tilemap.GetCellCenterWorld(cellPosition);
-        transform.position = worldPos;
+        cellPosition = tilemap.WorldToCell(transform.position);
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
     }
 
     void UpdateRotation()
@@ -136,20 +126,12 @@ public class Enemy : MonoBehaviour
 
         switch (direction)
         {
-            case Direction.Up:
-                angle = 0f;
-                break;
-            case Direction.Right:
-                angle = -90f;
-                break;
-            case Direction.Down:
-                angle = 180f;
-                break;
-            case Direction.Left:
-                angle = 90f;
-                break;
+            case Direction.Up: angle = 0f; break;
+            case Direction.Right: angle = -90f; break;
+            case Direction.Down: angle = 180f; break;
+            case Direction.Left: angle = 90f; break;
         }
-        
+
         transform.rotation = Quaternion.Euler(0f, 0f, angle);
     }
 
@@ -200,12 +182,20 @@ public class Enemy : MonoBehaviour
         }
         return dir;
     }
-}
 
-public enum Direction
-{
-    Up,
-    Down,
-    Left,
-    Right
+    bool IsBlocked(CellType t)
+    {
+        return t == CellType.Wall ||
+            t == CellType.Rock ||
+            t == CellType.Dirt ||
+            t == CellType.Enemy;
+    }
+
+    public enum Direction
+    {
+        Up,
+        Down,
+        Left,
+        Right
+    }
 }

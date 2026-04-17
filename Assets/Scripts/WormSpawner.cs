@@ -1,17 +1,21 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using System.Collections;
+using System.Collections.Generic;
 
-public class WormSpawner : MonoBehaviour
+public class WormSpawnerGrid : MonoBehaviour
 {
     public GameObject wormHeadPrefab;
     public GameObject wormBodyPrefab;
     public GameObject wormTailPrefab;
+
     public int wormLength = 5;
     public Tilemap tilemap;
 
-    public float spawnDelay = 0.1f;
+    public float spawnDelay = 0.05f;
     private bool spawned = false;
+
+    public Vector3Int initialDirection = Vector3Int.right;
 
     public void SpawnWorm()
     {
@@ -23,38 +27,57 @@ public class WormSpawner : MonoBehaviour
 
     IEnumerator SpawnRoutine()
     {
-        Vector3 spawnPos = transform.position;
-        Worm headScript = null;
+        Vector3Int startCell = tilemap.WorldToCell(transform.position);
+
+        WormGrid headScript = null;
+
+        // 👉 direction inverse pour construire le corps derrière la tête
+        Vector3Int buildDir = -initialDirection;
+
+        List<Vector3Int> spawnCells = new List<Vector3Int>();
+
+        // 🔹 calcul des positions du worm
+        for (int i = 0; i < wormLength; i++)
+        {
+            Vector3Int cell = startCell + (buildDir * i);
+            spawnCells.Add(cell);
+        }
 
         for (int i = 0; i < wormLength; i++)
         {
+            Vector3Int cell = spawnCells[i];
+            Vector3 worldPos = tilemap.GetCellCenterWorld(cell);
+
             GameObject segment;
 
             if (i == 0)
-                segment = Instantiate(wormHeadPrefab, spawnPos, Quaternion.identity);
+                segment = Instantiate(wormHeadPrefab, worldPos, Quaternion.identity);
             else if (i == wormLength - 1)
-                segment = Instantiate(wormTailPrefab, spawnPos, Quaternion.identity);
+                segment = Instantiate(wormTailPrefab, worldPos, Quaternion.identity);
             else
-                segment = Instantiate(wormBodyPrefab, spawnPos, Quaternion.identity);
+                segment = Instantiate(wormBodyPrefab, worldPos, Quaternion.identity);
 
             if (i == 0)
             {
-                headScript = segment.GetComponent<Worm>();
+                headScript = segment.GetComponent<WormGrid>();
                 headScript.tilemap = tilemap;
-                headScript.moveDirection = Vector3Int.right;
+                headScript.moveDirection = initialDirection;
 
-                // 🔥 Pré-remplir l'historique pour éviter bugs
+                // 🔥 historique pré-rempli (EN CELLULES)
                 for (int j = 0; j < 50; j++)
-                    headScript.positionHistory.Add(spawnPos);
+                {
+                    headScript.positionHistory.Add(cell);
+                }
             }
             else
             {
-                WormSegment segmentScript = segment.GetComponent<WormSegment>();
-                segmentScript.head = headScript;
-                segmentScript.index = i;
+                WormSegmentGrid seg = segment.GetComponent<WormSegmentGrid>();
+                seg.head = headScript;
+                seg.index = i;
+                seg.tilemap = tilemap;
             }
 
-            // 👇 attendre avant le prochain segment
+            // ⏱ petit délai pour effet visuel
             yield return new WaitForSeconds(spawnDelay);
         }
 

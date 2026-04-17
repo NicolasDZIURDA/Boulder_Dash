@@ -2,124 +2,146 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.SceneManagement;
 
-public class Player : MonoBehaviour
+public class PlayerGrid : MonoBehaviour
 {
     public Tilemap tilemap;
-    public TileBase dirtTile;
-    public Transform player;
     public float moveCooldown = 0.1f;
     private float lastMoveTime;
     private int coinCount = 0;
+    private Vector3Int cellPosition;
+
+    void Start()
+    {
+        if (tilemap == null)
+            tilemap = FindObjectOfType<Tilemap>();
+
+        SnapToGrid();
+
+        GridManager.Instance.SetCell(cellPosition, CellType.Player);
+    }
 
     void Update()
     {
-        // Déplacement
+        if (Time.time - lastMoveTime < moveCooldown) return;
+
         if (Input.GetKeyDown(KeyCode.RightArrow)) TryMove(Vector3Int.right);
         if (Input.GetKeyDown(KeyCode.LeftArrow)) TryMove(Vector3Int.left);
         if (Input.GetKeyDown(KeyCode.UpArrow)) TryMove(Vector3Int.up);
         if (Input.GetKeyDown(KeyCode.DownArrow)) TryMove(Vector3Int.down);
-
-        // Vérifie la mort autour du joueur
-        CheckDeathAround();
     }
 
     void TryMove(Vector3Int dir)
     {
-        Vector3Int playerCell = tilemap.WorldToCell(transform.position);
-        Vector3Int targetCell = playerCell + dir;
+        Vector3Int target = cellPosition + dir;
+        CellType targetType = GridManager.Instance.GetCell(target);
 
-        if (tilemap.HasTile(targetCell) && tilemap.GetTile(targetCell) != dirtTile)
+        // 🧱 mur
+        if (targetType == CellType.Wall)
             return;
 
-        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(targetCell));
-
-        if (hit != null)
+        // 🟫 dirt → on creuse
+        if (targetType == CellType.Dirt)
         {
-            WormSpawner spawner = hit.GetComponent<WormSpawner>();
-            if (spawner != null)
-            {
-                spawner.SpawnWorm();
-                return;
-            }
-            if (hit.CompareTag("Door"))
-            {
-                Debug.Log("You Win !");
-                transform.position = tilemap.GetCellCenterWorld(targetCell);
-            }
-
-            if (hit.CompareTag("Coin"))
-            {
-                coinCount++;
-                Destroy(hit.gameObject);
-
-                Debug.Log("Coins : " + coinCount);
-
-                tilemap.SetTile(targetCell, null);
-                transform.position = tilemap.GetCellCenterWorld(targetCell);
-
-                return;
-            }
-
-            if (hit.CompareTag("Rock"))
-            {
-                if (dir == Vector3Int.up || dir == Vector3Int.down)
-                    return;
-
-                Vector3Int nextCell = targetCell + dir;
-
-                if (tilemap.HasTile(nextCell))
-                    return;
-
-                Collider2D hitNext = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(nextCell));
-
-                if (hitNext == null)
-                {
-                    // pousser le rocher
-                    hit.transform.position = tilemap.GetCellCenterWorld(nextCell);
-
-                    // avancer le joueur
-                    transform.position = tilemap.GetCellCenterWorld(targetCell);
-                }
-                return;
-            }
-
+            GridManager.Instance.Dig(target);
+            MoveTo(target);
+            return;
         }
-        // case vide → on avance
-        tilemap.SetTile(targetCell, null);
-        transform.position = tilemap.GetCellCenterWorld(targetCell);
+
+        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(target));
+
+        if (targetType == CellType.Coin)
+        {
+            coinCount++;
+            Debug.Log("Coins : " + coinCount);
+
+            GridManager.Instance.SetCell(target, CellType.Empty);
+
+            if (hit != null)
+                Destroy(hit.gameObject);
+                
+            MoveTo(target);
+            return;
+        }
+
+        // 🚪 porte
+        if (targetType == CellType.Door)
+        {
+            Debug.Log("You Win !");
+            MoveTo(target);
+            return;
+        }
+
+        // 🪨 pousser rocher
+        if (targetType == CellType.Rock)
+        {
+            // uniquement gauche/droite
+            if (dir == Vector3Int.up || dir == Vector3Int.down)
+                return;
+
+            Vector3Int pushCell = target + dir;
+
+            if (GridManager.Instance.IsEmpty(pushCell))
+            {
+                // déplacer rocher
+                MoveRock(target, pushCell);
+
+                // déplacer joueur
+                MoveTo(target);
+            }
+            return;
+        }
+
+        // 💀 ennemi ou worm
+        if (targetType == CellType.Enemy || targetType == CellType.Worm)
+        {
+            Die();
+            return;
+        }
+
+        // ✅ case vide
+        if (targetType == CellType.Empty)
+        {
+            MoveTo(target);
+        }
     }
 
-    void CheckDeathAround()
+    void MoveTo(Vector3Int newCell)
     {
-        Vector3Int playerCell = tilemap.WorldToCell(transform.position);
+        GridManager.Instance.ClearCell(cellPosition);
 
-        // Les 5 positions à vérifier : la case du joueur + 4 adjacentes
-        Vector3Int[] checkCells = new Vector3Int[]
-        {
-            playerCell,
-            playerCell + Vector3Int.up,
-            playerCell + Vector3Int.down,
-            playerCell + Vector3Int.left,
-            playerCell + Vector3Int.right
-        };
+        cellPosition = newCell;
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
 
-        foreach (var cell in checkCells)
+        GridManager.Instance.SetCell(cellPosition, CellType.Player);
+
+        lastMoveTime = Time.time;
+    }
+
+    void MoveRock(Vector3Int from, Vector3Int to)
+    {
+        // trouver le GameObject rock
+        foreach (var obj in FindObjectsOfType<FallGrid>())
         {
-            Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(cell));
-            if (hit != null && hit.CompareTag("Enemy"))
+            if (obj.transform.position == tilemap.GetCellCenterWorld(from))
             {
-                Die();
-                return;
+                obj.transform.position = tilemap.GetCellCenterWorld(to);
+                break;
             }
         }
+
+        GridManager.Instance.ClearCell(from);
+        GridManager.Instance.SetCell(to, CellType.Rock);
+    }
+
+    void SnapToGrid()
+    {
+        cellPosition = tilemap.WorldToCell(transform.position);
+        transform.position = tilemap.GetCellCenterWorld(cellPosition);
     }
 
     public void Die()
     {
-        // désactiver le joueur immédiatement
         gameObject.SetActive(false);
-
-        // recharger la scène
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }

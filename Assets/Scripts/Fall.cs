@@ -1,310 +1,142 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
-using System.Collections;
-using System.Collections.Generic;
 
-public class Fall : MonoBehaviour
+public class FallGrid : MonoBehaviour
 {
-    [Header("Réglages")]
     public Tilemap tilemap;
-    public float fallDelay = 1f;
-    public int explosionRadius = 1;
-    public GameObject coinPrefab;
-
-    [Header("Layers & Tags")]
-    public LayerMask destructibleLayer;
-    
-    [Header("Autre")]
-    private float timer = 0f;
+    public float fallDelay = 0.2f;
+    private float timer;
+    private Vector3Int cell;
     private bool isFalling = false;
-    private Vector3Int cellPosition;
 
     void Start()
     {
-        if (tilemap == null)
-            tilemap = FindObjectOfType<Tilemap>();
-
-        // Snap à la grille
         SnapToGrid();
+        GridManager.Instance.SetCell(cell, GetCellType());
     }
 
     void SnapToGrid()
     {
-        // centre de la cellule
-        cellPosition = tilemap.WorldToCell(transform.position);
-        Vector3 worldPos = tilemap.GetCellCenterWorld(cellPosition);
-        transform.position = worldPos;
+        cell = tilemap.WorldToCell(transform.position);
+        transform.position = tilemap.GetCellCenterWorld(cell);
     }
 
     void Update()
     {
         timer += Time.deltaTime;
-
         if (timer < fallDelay) return;
-
         timer = 0f;
 
-        Vector3Int currentCell = tilemap.WorldToCell(transform.position);
-        Vector3Int belowCell = currentCell + Vector3Int.down;
-        Vector3 worldPosBelow = tilemap.GetCellCenterWorld(belowCell);
+        TryFall();
+    }
 
-        // 🔴 Si un ennemi est déjà sur la même case → explosion directe
-        if (IsTagAtPosition(transform.position, "Enemy"))
+    void TryFall()
+    {
+        Vector3Int below = cell + Vector3Int.down;
+        CellType belowType = GridManager.Instance.GetCell(below);
+
+        // 🔽 chute
+        if (belowType == CellType.Empty)
         {
-            Explode(currentCell);
-            return;
-        }
-
-        // 🧱 Si tile en dessous → stop
-        TileBase tileBelow = tilemap.GetTile(belowCell);
-        
-        if (tileBelow != null)
-        {
-            // 🚫 si c'est de la terre → pas de glissement
-            if (tileBelow.name == "dirt")
-            {
-                isFalling = false;
-                return;
-            }
-
-            // sinon comportement normal
-            if (TrySlide(currentCell))
-                return;
-
-            isFalling = false;
-            return;
-        }
-                
-        // 🔍 Détection objet en dessous
-        Collider2D hitBelow = Physics2D.OverlapCircle(worldPosBelow, 0.2f);
-
-        if (hitBelow != null)
-        {
-            if (hitBelow.CompareTag("Door"))
-            {
-                isFalling = false;
-                return;
-            }
-            if (isFalling)
-            {
-                if (hitBelow.CompareTag("Enemy"))
-                {
-                    transform.position = worldPosBelow;
-
-                    if (IsTagAtPosition(transform.position, "Enemy"))
-                    {
-                        Explode(belowCell);
-                        return;
-                    }
-                }
-                else if (hitBelow.CompareTag("Player"))
-                {
-                    Explode(belowCell);
-                    return;
-                }
-            }
-
-            // 👉 tentative de glissement
-            if (TrySlide(currentCell))
-                return;
-
-            isFalling = false;
-            return;
-        }
-
-        if (!GridReservation.reservedCells.Contains(belowCell))
-        {
-            GridReservation.reservedCells.Add(belowCell);
-            transform.position = worldPosBelow;
+            MoveTo(below);
             isFalling = true;
+            return;
         }
-        // ⬇ chute normale
-        isFalling = true;
+
+        if (TrySlide())
+        {
+            isFalling = true;
+            return;
+        }
+
+        isFalling = false;
     }
 
-    // 💥 Explosion → passe en coroutine
-    void Explode(Vector3Int cell)
+    bool TrySlide()
     {
-        StartCoroutine(ExplodeThenSpawn(cell));
-    }
+        Vector3Int down = cell + Vector3Int.down;
+        Collider2D hitDown = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(down), 0.1f);
 
-    IEnumerator ExplodeThenSpawn(Vector3Int centerCell)
-    {
-        List<Vector3Int> affectedCells = new List<Vector3Int>();
-        List<Vector3Int> coinSpawnCells = new List<Vector3Int>();
-
-        // 💥 1. CALCUL DES CASES (AVANT toute modif)
-        for (int x = -explosionRadius; x <= explosionRadius; x++)
-        {
-            for (int y = -explosionRadius; y <= explosionRadius; y++)
-            {
-                affectedCells.Add(centerCell + new Vector3Int(x, y, 0));
-            }
-        }
-
-        // 💥 2. EXPLOSION
-        foreach (Vector3Int targetCell in affectedCells)
-        {
-            Vector3 worldPos = tilemap.GetCellCenterWorld(targetCell);
-            Collider2D[] hits = Physics2D.OverlapCircleAll(worldPos, 0.2f, destructibleLayer);
-
-            foreach (Collider2D hit in hits)
-            {
-                if (hit.CompareTag("Player"))
-                {
-                    hit.GetComponent<Player>().Die();
-                }
-
-                if (hit.CompareTag("Enemy"))
-                {
-                    Enemy enemy = hit.GetComponent<Enemy>();
-
-                    if (enemy != null && enemy.dropCoins)
-                    {
-                        for (int x = -explosionRadius; x <= explosionRadius; x++)
-                        {
-                            for (int y = -explosionRadius; y <= explosionRadius; y++)
-                            {
-                                coinSpawnCells.Add(centerCell + new Vector3Int(x, y, 0));
-                            }
-                        }
-                    }
-                    Destroy(hit.gameObject);
-                    //GridReservation.Release(targetCell);
-                }
-            }
-            TileBase tile = tilemap.GetTile(targetCell);
-
-            if (tile != null)
-            {
-                if (tile.name != "wall1")
-                {
-                    tilemap.SetTile(targetCell, null);
-                }
-            }
-        }
-        // ⏱ attendre que Unity nettoie tout
-        yield return null;
-
-        // 💰 3. SPAWN (SANS conditions bloquantes)
-        foreach (Vector3Int cellPos in coinSpawnCells)
-        {
-            TileBase tile = tilemap.GetTile(cellPos);
-            Vector3 pos = tilemap.GetCellCenterWorld(cellPos);
-
-            Collider2D[] hits = Physics2D.OverlapCircleAll(pos, 0.2f);
-
-            bool alreadyCoin = false;
-
-            foreach (var h in hits)
-            {
-                if (h.CompareTag("Coin"))
-                {
-                    alreadyCoin = true;
-                    break;
-                }
-            }
-
-            if (tile == null && !alreadyCoin)
-            {
-                Instantiate(coinPrefab, pos, Quaternion.identity);
-            }
-        }
-
-        if (gameObject.tag == "Rock" || gameObject.tag == "Coin")
-        {
-            Destroy(gameObject);
-        }
-    }
-
-    // 🔍 Détection propre multi-colliders
-    private bool IsTagAtPosition(Vector3 position, string tag)
-    {
-        Collider2D[] hits = Physics2D.OverlapPointAll(position);
-
-        foreach (Collider2D hit in hits)
-        {
-            if (((1 << hit.gameObject.layer) & destructibleLayer) != 0)
-            {
-                if (hit.CompareTag(tag))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool TrySlide(Vector3Int currentCell)
-    {
-        // dessous (vérifier si un game object empêche de glisser)
-        Vector3Int down = currentCell + Vector3Int.down;
-
-        // gauche
-        Vector3Int left = currentCell + Vector3Int.left;
+        Vector3Int left = cell + Vector3Int.left;
         Vector3Int downLeft = left + Vector3Int.down;
 
-        // droite
-        Vector3Int right = currentCell + Vector3Int.right;
+        Vector3Int right = cell + Vector3Int.right;
         Vector3Int downRight = right + Vector3Int.down;
 
-        Collider2D hitDown = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(down), 0.2f, destructibleLayer);
-
         if (hitDown != null && hitDown.CompareTag("Player"))
-        {
             return false;
+
+        // gauche
+        if (GridManager.Instance.IsEmpty(left) && GridManager.Instance.IsEmpty(downLeft))
+        {
+            MoveTo(left);
+            return true;
         }
 
-        // Vérif gauche
-        if (!tilemap.HasTile(left) && !tilemap.HasTile(downLeft))
+        // droite
+        if (GridManager.Instance.IsEmpty(right) && GridManager.Instance.IsEmpty(downRight))
         {
-            Collider2D hitLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(left), 0.2f, destructibleLayer);
-            Collider2D hitDownLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downLeft), 0.2f, destructibleLayer);
-
-            if (hitLeft == null && hitDownLeft == null)
-            {
-                GridReservation.reservedCells.Add(left);
-                transform.position = tilemap.GetCellCenterWorld(left);
-                isFalling = true;
-                return true;
-            }
-        }
-
-        // Vérif droite
-        if (!tilemap.HasTile(right) && !tilemap.HasTile(downRight))
-        {
-            Collider2D hitRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(right), 0.2f, destructibleLayer);
-            Collider2D hitDownRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downRight), 0.2f, destructibleLayer);
-
-            if (hitRight == null && hitDownRight == null)
-            {
-                GridReservation.reservedCells.Add(right);
-                transform.position = tilemap.GetCellCenterWorld(right);
-                isFalling = true;
-                return true;
-            }
+            MoveTo(right);
+            return true;
         }
 
         return false;
     }
 
-    // à retirer
-    void DisableAndDestroy(GameObject obj)
+    void MoveTo(Vector3Int target)
     {
-        // désactive tous les scripts (empêche Update)
-        MonoBehaviour[] scripts = obj.GetComponents<MonoBehaviour>();
-        foreach (var s in scripts)
-            s.enabled = false;
+        CellType targetType = GridManager.Instance.GetCell(target);
 
-        // désactive collider (plus d'interactions)
-        Collider2D col = obj.GetComponent<Collider2D>();
-        if (col != null)
-            col.enabled = false;
+        if (targetType == CellType.Player || targetType == CellType.Enemy)
+        {
+            Explode(target);
+            return;
+        }
+        
+        GridManager.Instance.ClearCell(cell);
 
-        // optionnel : désactiver rendu immédiat
-        SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
-        if (sr != null)
-            sr.enabled = false;
+        cell = target;
+        transform.position = tilemap.GetCellCenterWorld(cell);
+        GridManager.Instance.SetCell(cell, GetCellType());
+    }
 
-        Destroy(obj);
+    void Explode(Vector3Int center)
+    {
+        Debug.Log("Explode function");
+        int radius = 1;
+
+        for (int x = -radius; x <= radius; x++)
+        {
+            for (int y = -radius; y <= radius; y++)
+            {
+                Vector3Int pos = center + new Vector3Int(x, y, 0);
+                CellType type = GridManager.Instance.GetCell(pos);
+
+                if (type == CellType.Player)
+                {
+                    PlayerGrid player = FindObjectOfType<PlayerGrid>();
+
+                    if (player != null)
+                        player.Die();
+                }
+
+                if (type == CellType.Enemy)
+                {
+                    Debug.Log("Enemy dead → spawn coins");
+                    // ici tu pourras spawn des coins
+                }
+
+                GridManager.Instance.ClearCell(pos);
+            }
+        }
+
+        Destroy(gameObject);
+    }
+
+    CellType GetCellType()
+    {
+        if (CompareTag("Rock")) return CellType.Rock;
+        if (CompareTag("Coin")) return CellType.Coin;
+        return CellType.Empty;
     }
 }

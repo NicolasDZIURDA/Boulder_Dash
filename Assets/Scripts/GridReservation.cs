@@ -1,54 +1,89 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.Tilemaps;
+using System.Collections.Generic;
 
-public class GridReservation : MonoBehaviour
+public enum CellType
 {
-    public static HashSet<Vector3Int> reservedCells = new HashSet<Vector3Int>();
-    public static Dictionary<Vector3Int, Enemy> occupiedCells = new Dictionary<Vector3Int, Enemy>();
+    Empty,
+    Wall,
+    Dirt,
+    Rock,
+    Coin,
+    Player,
+    Enemy,
+    Worm,
+    Door
+}
 
-    void LateUpdate()
-    {
-        // reset à chaque frame
-        reservedCells.Clear();
-    }
+public class GridManager : MonoBehaviour
+{
+    public static GridManager Instance;
+    public Tilemap tilemap;
+    public TileBase wallTile;
+    public TileBase dirtTile;
+    private Dictionary<Vector3Int, CellType> grid = new();
 
     void Awake()
     {
-        SceneManager.sceneLoaded += OnSceneLoaded;
+        Instance = this;
+        BakeTilemap();
     }
 
-    void OnDestroy()
+    void BakeTilemap()
     {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
+        BoundsInt bounds = tilemap.cellBounds;
+
+        foreach (Vector3Int pos in bounds.allPositionsWithin)
+        {
+            TileBase tile = tilemap.GetTile(pos);
+
+            if (tile == null)
+            {
+                SetCell(pos, CellType.Empty);
+                continue;
+            }
+
+            if (tile == wallTile)
+                SetCell(pos, CellType.Wall);
+
+            else if (tile == dirtTile)
+                SetCell(pos, CellType.Dirt);
+
+            else
+                SetCell(pos, CellType.Empty);
+        }
     }
 
-    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    public CellType GetCell(Vector3Int pos)
     {
-        occupiedCells.Clear();
+        return grid.ContainsKey(pos) ? grid[pos] : CellType.Empty;
     }
 
-    public static bool IsOccupied(Vector3Int pos)
+    public void SetCell(Vector3Int pos, CellType type)
     {
-        return occupiedCells.ContainsKey(pos);
+        grid[pos] = type;
     }
 
-    public static Enemy GetEnemyAt(Vector3Int pos)
+    public void ClearCell(Vector3Int pos)
     {
-        if (occupiedCells.TryGetValue(pos, out Enemy e))
-            return e;
-
-        return null;
+        if (grid.ContainsKey(pos))
+            grid[pos] = CellType.Empty;
     }
 
-    public static void Reserve(Vector3Int pos, Enemy enemy)
+    public bool IsEmpty(Vector3Int pos)
     {
-        occupiedCells[pos] = enemy;
+        return GetCell(pos) == CellType.Empty;
     }
 
-    public static void Release(Vector3Int pos)
+    public bool IsSolid(Vector3Int pos)
     {
-        if (occupiedCells.ContainsKey(pos))
-            occupiedCells.Remove(pos);
+        CellType t = GetCell(pos);
+        return t == CellType.Wall || t == CellType.Rock || t == CellType.Dirt;
+    }
+
+    public void Dig(Vector3Int pos)
+    {
+        SetCell(pos, CellType.Empty);
+        tilemap.SetTile(pos, null);
     }
 }
