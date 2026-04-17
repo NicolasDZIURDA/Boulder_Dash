@@ -8,7 +8,6 @@ public class Worm : MonoBehaviour
     public Vector3Int moveDirection = Vector3Int.right;
     public float moveDelay = 0.3f;
     private float timer;
-
     public List<Vector3> positionHistory = new List<Vector3>();
 
     void Start()

@@ -6,7 +6,6 @@ public class CameraStep : MonoBehaviour
 
     public float stepX = 3f; // distance du "saut"
     public float stepY = 2f;
-
     public float thresholdX = 2f; // distance avant déclenchement
     public float thresholdY = 1.5f;
 

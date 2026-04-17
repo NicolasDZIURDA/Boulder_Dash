@@ -9,7 +9,6 @@ public class WormSpawner : MonoBehaviour
     public GameObject wormTailPrefab;
     public int wormLength = 5;
     public Tilemap tilemap;
-
     public float spawnDelay = 0.1f;
     private bool spawned = false;
 

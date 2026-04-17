@@ -6,7 +6,6 @@ public class Enemy : MonoBehaviour
     public Vector3Int cellPosition;
     public Direction direction;
     public bool dropCoins = true;
-
     public float moveInterval = 0.1f;
     private float timer;
     public float turnCooldown = 0.1f;
@@ -16,8 +15,6 @@ public class Enemy : MonoBehaviour
 
     void Start()
     {
-        GridReservation.Reserve(cellPosition, this);
-
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
 
@@ -28,7 +25,6 @@ public class Enemy : MonoBehaviour
     void Update()
     {
         timer += Time.deltaTime;
-        //Debug.Log("Enemy : " + transform.position);
 
         if (timer >= moveInterval)
         {
@@ -103,10 +99,7 @@ public class Enemy : MonoBehaviour
         if (GridReservation.IsOccupied(next))
             return;
         
-        // 🔓 libérer ancienne case
         GridReservation.Release(cellPosition);
-
-        // 🔒 réserver nouvelle
         GridReservation.Reserve(next, this);
 
         cellPosition = next;
