@@ -11,11 +11,10 @@ public class Fall : MonoBehaviour
     public int explosionRadius = 1;
     public GameObject coinPrefab;
 
-    [Header("Layers & Tags")]
-    public LayerMask destructibleLayer;
-    
     [Header("Autre")]
     private float timer = 0f;
+    private float time = 0f;
+    float threshold;
     private bool isFalling = false;
     private Vector3Int cellPosition;
 
@@ -24,13 +23,13 @@ public class Fall : MonoBehaviour
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
 
-        // Snap à la grille
+        threshold = Random.Range(0.2f, 2f);
+
         SnapToGrid();
     }
 
     void SnapToGrid()
     {
-        // centre de la cellule
         cellPosition = tilemap.WorldToCell(transform.position);
         Vector3 worldPos = tilemap.GetCellCenterWorld(cellPosition);
         transform.position = worldPos;
@@ -61,9 +60,24 @@ public class Fall : MonoBehaviour
         if (tileBelow != null)
         {
             // 🚫 si c'est de la terre → pas de glissement
-            if (tileBelow.name == "dirt")
+            if (tileBelow.name == "dirt" || tileBelow.name == "quicksand")
             {
                 isFalling = false;
+                if (tileBelow.name == "quicksand")
+                {
+                    isFalling = false;
+                    time += Time.deltaTime;
+                    if (time > threshold)
+                    {
+                        transform.position = worldPosBelow;
+                        time = 0f;
+                        threshold = Random.Range(20f, 100f);
+                    }
+                }
+                else
+                {
+                    time = 0f;
+                }
                 return;
             }
 
@@ -90,12 +104,8 @@ public class Fall : MonoBehaviour
                 if (hitBelow.CompareTag("Enemy"))
                 {
                     transform.position = worldPosBelow;
-
-                    if (IsTagAtPosition(transform.position, "Enemy"))
-                    {
-                        Explode(belowCell);
-                        return;
-                    }
+                    Explode(belowCell);
+                    return;
                 }
                 else if (hitBelow.CompareTag("Player"))
                 {
@@ -146,7 +156,7 @@ public class Fall : MonoBehaviour
         foreach (Vector3Int targetCell in affectedCells)
         {
             Vector3 worldPos = tilemap.GetCellCenterWorld(targetCell);
-            Collider2D[] hits = Physics2D.OverlapCircleAll(worldPos, 0.2f, destructibleLayer);
+            Collider2D[] hits = Physics2D.OverlapCircleAll(worldPos, 0.2f);
 
             foreach (Collider2D hit in hits)
             {
@@ -170,7 +180,6 @@ public class Fall : MonoBehaviour
                         }
                     }
                     Destroy(hit.gameObject);
-                    //GridReservation.Release(targetCell);
                 }
             }
             TileBase tile = tilemap.GetTile(targetCell);
@@ -182,6 +191,8 @@ public class Fall : MonoBehaviour
                     tilemap.SetTile(targetCell, null);
                 }
             }
+
+            GridReservation.Release(targetCell);
         }
         // ⏱ attendre que Unity nettoie tout
         yield return null;
@@ -211,7 +222,7 @@ public class Fall : MonoBehaviour
             }
         }
 
-        if (gameObject.tag == "Rock" || gameObject.tag == "Coin")
+        if (gameObject.tag == "Rock")
         {
             Destroy(gameObject);
         }
@@ -224,7 +235,7 @@ public class Fall : MonoBehaviour
 
         foreach (Collider2D hit in hits)
         {
-            if (((1 << hit.gameObject.layer) & destructibleLayer) != 0)
+            if ((1 << hit.gameObject.layer) != 0)
             {
                 if (hit.CompareTag(tag))
                     return true;
@@ -247,7 +258,7 @@ public class Fall : MonoBehaviour
         Vector3Int right = currentCell + Vector3Int.right;
         Vector3Int downRight = right + Vector3Int.down;
 
-        Collider2D hitDown = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(down), 0.2f, destructibleLayer);
+        Collider2D hitDown = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(down), 0.2f);
 
         if (hitDown != null && hitDown.CompareTag("Player"))
         {
@@ -257,8 +268,8 @@ public class Fall : MonoBehaviour
         // Vérif gauche
         if (!tilemap.HasTile(left) && !tilemap.HasTile(downLeft))
         {
-            Collider2D hitLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(left), 0.2f, destructibleLayer);
-            Collider2D hitDownLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downLeft), 0.2f, destructibleLayer);
+            Collider2D hitLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(left), 0.2f);
+            Collider2D hitDownLeft = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downLeft), 0.2f);
 
             if (hitLeft == null && hitDownLeft == null)
             {
@@ -272,8 +283,8 @@ public class Fall : MonoBehaviour
         // Vérif droite
         if (!tilemap.HasTile(right) && !tilemap.HasTile(downRight))
         {
-            Collider2D hitRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(right), 0.2f, destructibleLayer);
-            Collider2D hitDownRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downRight), 0.2f, destructibleLayer);
+            Collider2D hitRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(right), 0.2f);
+            Collider2D hitDownRight = Physics2D.OverlapCircle(tilemap.GetCellCenterWorld(downRight), 0.2f);
 
             if (hitRight == null && hitDownRight == null)
             {

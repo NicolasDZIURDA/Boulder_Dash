@@ -3,7 +3,7 @@ using UnityEngine;
 public class WormSegment : MonoBehaviour
 {
     public Worm head;
-    public int index; // 1 = premier segment, 2 = deuxième...
+    public int index;
 
     void Update()
     {

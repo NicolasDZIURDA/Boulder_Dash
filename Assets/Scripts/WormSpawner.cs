@@ -9,7 +9,6 @@ public class WormSpawner : MonoBehaviour
     public GameObject wormTailPrefab;
     public int wormLength = 5;
     public Tilemap tilemap;
-
     public float spawnDelay = 0.1f;
     private bool spawned = false;
 
@@ -31,7 +30,10 @@ public class WormSpawner : MonoBehaviour
             GameObject segment;
 
             if (i == 0)
+            {
                 segment = Instantiate(wormHeadPrefab, spawnPos, Quaternion.identity);
+                GetComponent<Renderer>().enabled = false;
+            }
             else if (i == wormLength - 1)
                 segment = Instantiate(wormTailPrefab, spawnPos, Quaternion.identity);
             else

@@ -6,19 +6,30 @@ public class Worm : MonoBehaviour
 {
     public Tilemap tilemap;
     public Vector3Int moveDirection = Vector3Int.right;
-    public float moveDelay = 0.3f;
+    public int wormLength = 8;
+    public float moveDelay = 0.1f;
     private float timer;
-
     public List<Vector3> positionHistory = new List<Vector3>();
+    private bool justTurnedAround = false;
+    public bool isEvil;
+    public GameObject rockPrefab;
+    public GameObject coinPrefab;
 
     void Start()
     {
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
-            
-        // initialiser la direction si le prefab n'a rien
+
         if (moveDirection == Vector3Int.zero)
             moveDirection = Vector3Int.right;
+
+        positionHistory.Clear();
+        positionHistory.Add(transform.position);
+    }
+    
+    void Awake()
+    {
+        positionHistory = new List<Vector3>();
     }
     
     void Update()
@@ -36,51 +47,63 @@ public class Worm : MonoBehaviour
 
     void MoveOnGrid()
     {
-        Vector3Int currentCell = tilemap.WorldToCell(transform.position);
-        Vector3Int nextCell = currentCell + new Vector3Int((int)moveDirection.x, (int)moveDirection.y, 0);
-
-        TileBase tile = tilemap.GetTile(nextCell);
-        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(nextCell));
-        
-        if (tile != null)
+        if (justTurnedAround)
         {
-            ChooseDirection();
+            justTurnedAround = false;
             return;
         }
 
-        if (hit != null)
+        Vector3Int currentCell = tilemap.WorldToCell(transform.position);
+        Vector3Int nextCell = currentCell + moveDirection;
+
+        TileBase tile = tilemap.GetTile(nextCell);
+        Collider2D hit = Physics2D.OverlapPoint(tilemap.GetCellCenterWorld(nextCell));
+
+        bool blocked = false;
+
+        if (tile != null)
+            blocked = true;
+
+        if (hit != null && !hit.CompareTag("Worm"))
         {
+            blocked = true;
             if (hit.CompareTag("Enemy"))
             {
-                ChooseDirection();
+                Enemy enemy = hit.GetComponent<Enemy>();
 
-                Enemy other = hit.GetComponent<Enemy>();
-                if (other != null)
+                if (enemy != null && !enemy.dropCoins)
                 {
-                    other.ReverseDirection();
+                    Vector3 pos = hit.transform.position;
+                    Instantiate(rockPrefab, pos, Quaternion.identity);
+                    Destroy(hit.gameObject);
                 }
-                return;
             }
-            else
+            else if(hit.CompareTag("Rock"))
             {
-                ChooseDirection();
-                return;
+                Vector3 pos = hit.transform.position;
+                Instantiate(coinPrefab, pos, Quaternion.identity);
+                Destroy(hit.gameObject);
             }
         }
         
-        positionHistory.Insert(0, transform.position); // sauvegarder position actuelle
-        transform.position = tilemap.GetCellCenterWorld(nextCell);
-
-        // (optionnel) limiter la taille de l'historique
-        if (positionHistory.Count > 10)
+        if (blocked)
         {
-            positionHistory.RemoveAt(positionHistory.Count - 1);
+            moveDirection = ChooseDirection();
+            nextCell = currentCell + moveDirection;
+            positionHistory.Insert(0, transform.position);
+            transform.position = tilemap.GetCellCenterWorld(nextCell);
         }
+        else
+        {
+            positionHistory.Insert(0, transform.position);
+            transform.position = tilemap.GetCellCenterWorld(nextCell);
+        }
+
+        CheckHistoryLength();
     }
 
-    void ChooseDirection()
+    Vector3Int ChooseDirection()
     {
-        // directions possibles
         Vector3Int[] directions = new Vector3Int[]
         {
             Vector3Int.up,
@@ -90,15 +113,13 @@ public class Worm : MonoBehaviour
         };
 
         Vector3Int currentCell = tilemap.WorldToCell(transform.position);
-
         Vector3Int opposite = -moveDirection;
 
         List<Vector3Int> validDirections = new List<Vector3Int>();
 
-        // 🔍 chercher directions valides (sans demi-tour)
         foreach (var dir in directions)
         {
-            if (dir == opposite) continue; // ❌ éviter demi-tour
+            if (dir == opposite) continue; // éviter demi-tour
 
             Vector3Int nextCell = currentCell + dir;
             TileBase tile = tilemap.GetTile(nextCell);
@@ -109,15 +130,22 @@ public class Worm : MonoBehaviour
 
             validDirections.Add(dir);
         }
-        // ✅ si on peut tourner → choisir au hasard
+
         if (validDirections.Count > 0)
         {
-            moveDirection = validDirections[Random.Range(0, validDirections.Count)];
+            return validDirections[Random.Range(0, validDirections.Count)];
         }
         else
         {
-            // 🔁 sinon → demi-tour forcé
-            moveDirection = opposite;
+            return opposite;
+        }
+    }
+
+    void CheckHistoryLength()
+    {
+        if (positionHistory.Count > wormLength)
+        {
+            positionHistory.RemoveAt(positionHistory.Count - 1);
         }
     }
 }
