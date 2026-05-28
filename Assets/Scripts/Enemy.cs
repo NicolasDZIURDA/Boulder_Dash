@@ -5,12 +5,11 @@ public class Enemy : MonoBehaviour
 {
     public Vector3Int cellPosition;
     public Direction direction;
-    public bool dropCoins = true;
+    public bool dropCoins;
     public float moveInterval = 0.1f;
     private float timer;
     public float turnCooldown = 0.1f;
     private float lastTurnTime;
-
     private Tilemap tilemap;
 
     void Start()

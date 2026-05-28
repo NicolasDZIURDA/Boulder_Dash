@@ -10,9 +10,11 @@ public class Fall : MonoBehaviour
     public float fallDelay = 1f;
     public int explosionRadius = 1;
     public GameObject coinPrefab;
-    
+
     [Header("Autre")]
     private float timer = 0f;
+    private float time = 0f;
+    float threshold;
     private bool isFalling = false;
     private Vector3Int cellPosition;
 
@@ -20,6 +22,8 @@ public class Fall : MonoBehaviour
     {
         if (tilemap == null)
             tilemap = FindObjectOfType<Tilemap>();
+
+        threshold = Random.Range(0.2f, 2f);
 
         SnapToGrid();
     }
@@ -56,9 +60,24 @@ public class Fall : MonoBehaviour
         if (tileBelow != null)
         {
             // 🚫 si c'est de la terre → pas de glissement
-            if (tileBelow.name == "dirt")
+            if (tileBelow.name == "dirt" || tileBelow.name == "quicksand")
             {
                 isFalling = false;
+                if (tileBelow.name == "quicksand")
+                {
+                    isFalling = false;
+                    time += Time.deltaTime;
+                    if (time > threshold)
+                    {
+                        transform.position = worldPosBelow;
+                        time = 0f;
+                        threshold = Random.Range(20f, 100f);
+                    }
+                }
+                else
+                {
+                    time = 0f;
+                }
                 return;
             }
 
@@ -161,7 +180,6 @@ public class Fall : MonoBehaviour
                         }
                     }
                     Destroy(hit.gameObject);
-                    Debug.Log("Ennemi détruit : " + targetCell);
                 }
             }
             TileBase tile = tilemap.GetTile(targetCell);
@@ -204,14 +222,9 @@ public class Fall : MonoBehaviour
             }
         }
 
-        if (gameObject.tag == "Rock" || gameObject.tag == "Coin")
+        if (gameObject.tag == "Rock")
         {
             Destroy(gameObject);
-        }
-
-        foreach (KeyValuePair<Vector3Int, Enemy> cell in GridReservation.occupiedCells)
-        {
-            print(cell);
         }
     }
 

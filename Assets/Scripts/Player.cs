@@ -13,11 +13,26 @@ public class Player : MonoBehaviour
 
     void Update()
     {
-        // Déplacement
-        if (Input.GetKeyDown(KeyCode.RightArrow)) TryMove(Vector3Int.right);
-        if (Input.GetKeyDown(KeyCode.LeftArrow)) TryMove(Vector3Int.left);
-        if (Input.GetKeyDown(KeyCode.UpArrow)) TryMove(Vector3Int.up);
-        if (Input.GetKeyDown(KeyCode.DownArrow)) TryMove(Vector3Int.down);
+        // empêcher les déplacements trop rapides
+        if (Time.time - lastMoveTime >= moveCooldown)
+        {
+            Vector3Int dir = Vector3Int.zero;
+
+            if (Input.GetKey(KeyCode.RightArrow))
+                dir = Vector3Int.right;
+            else if (Input.GetKey(KeyCode.LeftArrow))
+                dir = Vector3Int.left;
+            else if (Input.GetKey(KeyCode.UpArrow))
+                dir = Vector3Int.up;
+            else if (Input.GetKey(KeyCode.DownArrow))
+                dir = Vector3Int.down;
+
+            if (dir != Vector3Int.zero)
+            {
+                TryMove(dir);
+                lastMoveTime = Time.time;
+            }
+        }
 
         // Vérifie la mort autour du joueur
         CheckDeathAround();
@@ -82,6 +97,9 @@ public class Player : MonoBehaviour
                 }
                 return;
             }
+
+            if (hit.CompareTag("GrowingWall") || hit.CompareTag("Worm"))
+                return;
 
         }
         // case vide → on avance
