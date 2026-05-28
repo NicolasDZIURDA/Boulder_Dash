@@ -7,14 +7,16 @@ public class Player : MonoBehaviour
     public Tilemap tilemap;
     public TileBase dirtTile;
     public Transform player;
+    private float timer;
     public float moveCooldown = 0.1f;
     private float lastMoveTime;
     private int coinCount = 0;
 
     void Update()
     {
-        // empêcher les déplacements trop rapides
-        if (Time.time - lastMoveTime >= moveCooldown)
+        timer += Time.deltaTime;
+
+        if (timer >= moveCooldown)
         {
             Vector3Int dir = Vector3Int.zero;
 
@@ -30,7 +32,7 @@ public class Player : MonoBehaviour
             if (dir != Vector3Int.zero)
             {
                 TryMove(dir);
-                lastMoveTime = Time.time;
+                timer = 0f;
             }
         }
 

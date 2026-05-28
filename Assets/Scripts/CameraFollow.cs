@@ -4,9 +4,9 @@ public class CameraStep : MonoBehaviour
 {
     public Transform player;
 
-    public float stepX = 3f; // distance du "saut"
+    public float stepX = 3f;
     public float stepY = 2f;
-    public float thresholdX = 2f; // distance avant déclenchement
+    public float thresholdX = 2f;
     public float thresholdY = 1.5f;
 
     void LateUpdate()
