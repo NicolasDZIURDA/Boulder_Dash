@@ -27,6 +27,8 @@ public class GridManager : MonoBehaviour
     public GameObject coinPrefab;
     private int coins;
     private float timer;
+    private bool explosionPending;
+    private List<ExplosionEvent> pendingExplosions = new();
     public bool gameOverPending = false;
     public int gameOverTimer = 0;
 
@@ -145,6 +147,18 @@ public class GridManager : MonoBehaviour
 
         ClearNextGrid();
         SimulateWorld();
+
+        if (explosionPending)
+        {
+            foreach (var pos in pendingExplosions)
+            {
+                TriggerExplosion(pos.x, pos.y, pos.lootCoins);
+            }
+
+            pendingExplosions.Clear();
+            explosionPending = false;
+        }
+
         SwapGrids();
         RenderGrid();
     }
@@ -189,8 +203,8 @@ public class GridManager : MonoBehaviour
                 }
             }
         }
-        CheckEnemyCollision();
         CheckAllCrushes();
+        CheckEnemyCollision();
     }
 
     public bool TryMove(int x, int y, int dx, int dy, bool isFalling)
@@ -201,10 +215,10 @@ public class GridManager : MonoBehaviour
         if (!IsInside(nx, ny))
             return false;
 
-        if (currentGrid[nx, ny].isSolid)
+        if (currentGrid[nx, ny].isSolid || nextGrid[nx, ny].isSolid)
             return false;
 
-        if (currentGrid[nx, ny].isReserved)
+        if (nextGrid[nx, ny].isReserved)
             return false;
 
         nextGrid[nx, ny].CopyFrom(currentGrid[x, y]);
@@ -229,14 +243,16 @@ public class GridManager : MonoBehaviour
                 {
                     if (GetCell(x, y - 1).type == CellType.Player)
                     {
-                        TriggerExplosion(x, y - 1, false);
+                        pendingExplosions.Add(new ExplosionEvent(x, y - 1, false));
+                        explosionPending = true;
                         OnPlayerKilled();
                     }
                     else if (GetCell(x, y - 1).type == CellType.Enemy)
                     {
                         Enemy enemy = currentGrid[x, y - 1].visual.GetComponent<Enemy>();
                         bool dropCoins = enemy.dropCoins;
-                        TriggerExplosion(x, y - 1, dropCoins);
+                        pendingExplosions.Add(new ExplosionEvent(x, y - 1, dropCoins));
+                        explosionPending = true;
                     }
                 }
             }
@@ -271,15 +287,13 @@ public class GridManager : MonoBehaviour
             return;
         }
 
-        Cell target = currentGrid[nx, ny];
-
-        if (target.type == CellType.Wall)
+        if (currentGrid[nx, ny].type == CellType.Wall)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
             return;
         }
 
-        if (target.type == CellType.Rock)
+        if (currentGrid[nx, ny].type == CellType.Rock)
         {
             if (move == Vector2Int.left || move == Vector2Int.right)
             {
@@ -295,9 +309,7 @@ public class GridManager : MonoBehaviour
                     return;
                 }
 
-                // 3. Nettoyage dans les deux grilles
                 currentGrid[nx, ny].Reset();
-                nextGrid[nx, ny].Reset();
             }
             else
             {
@@ -306,58 +318,25 @@ public class GridManager : MonoBehaviour
             }
         }
 
-        if (target.type == CellType.Coin)
-            CollectCoin(nx, ny);
-
-        if (target.type == CellType.Dirt)
-            Dig(nx, ny);
-
-        // Vérification de réservation
-        if (nextGrid[nx, ny].isReserved)
+        if (currentGrid[nx, ny].type == CellType.Coin)
         {
-            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-            return;
+            Destroy(currentGrid[nx, ny].visual);
+            currentGrid[nx, ny].Reset();
+            coins++;
+            Debug.Log("Coins collected : " + coins);
+        }
+
+        if (currentGrid[nx, ny].type == CellType.Dirt)
+        {
+            tilemap.SetTile(new Vector3Int(nx, ny, 0), null);
+            nextGrid[nx, ny].Reset();
+            currentGrid[nx, ny].Reset(); // Obligatoire pour déplacement du joueur
         }
 
         nextGrid[nx, ny].CopyFrom(currentGrid[x, y]);
-        nextGrid[nx, ny].isReserved = true;
-    }
-
-    void Dig(int x, int y)
-    {
-        // 1. Destruction de l'objet visuel (si il y en a un)
-        if (currentGrid[x, y].visual != null)
-        {
-            Destroy(currentGrid[x, y].visual);
-        }
-
-        // 2. Suppression de la tile sur la Tilemap (très important !)
-        Vector3Int tilePos = new Vector3Int(x, y, 0);
-        if (tilemap.HasTile(tilePos))
-        {
-            tilemap.SetTile(tilePos, null);        // ← C'est ça qui manquait souvent
-        }
-
-        // 3. Nettoyage dans les deux grilles
-        currentGrid[x, y].Reset();
         nextGrid[x, y].Reset();
     }
-
-    void CollectCoin(int x, int y)
-    {
-        if (currentGrid[x, y].visual != null)
-        {
-            Destroy(currentGrid[x, y].visual);
-        }
-
-        // IMPORTANT : nettoyer CURRENT aussi immédiatement
-        currentGrid[x, y].Reset();
-        nextGrid[x, y].Reset();
-
-        coins++;
-        Debug.Log("Coins collected : " + coins);
-    }
-
+    
     void CheckEnemyCollision()
     {
         for (int x = 0; x < width; x++)
@@ -374,8 +353,9 @@ public class GridManager : MonoBehaviour
 
                     Enemy enemy = currentGrid[ex, ey].visual.GetComponent<Enemy>();
                     bool dropCoins = enemy != null && enemy.dropCoins;
-
-                    TriggerExplosion(x, y, dropCoins);
+                    pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
+                    explosionPending = true;
+                    //TriggerExplosion(x, y, dropCoins);
                     OnPlayerKilled();
                     return;
                 }
@@ -459,7 +439,6 @@ public class GridManager : MonoBehaviour
 
     public void TriggerExplosion(int x, int y, bool lootCoins)
     {
-        List<Vector3Int> spawnCoins = new List<Vector3Int>();
         for (int dx = -1; dx <= 1; dx++)
         {
             for (int dy = -1; dy <= 1; dy++)
@@ -467,27 +446,42 @@ public class GridManager : MonoBehaviour
                 int nx = x + dx;
                 int ny = y + dy;
 
-                if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                if (!IsInside(nx, ny))
                     continue;
+
+                if (currentGrid[nx, ny].type == CellType.Player)
+                    OnPlayerKilled();
+
+                nextGrid[nx, ny].isReserved = true;
 
                 Vector3Int tilePos = new Vector3Int(nx, ny, 0);
 
-                if (tilemap.HasTile(tilePos) && tilemap.GetTile(tilePos) == steelWallTile)
+                if (tilemap.HasTile(tilePos))
                 {
                     if (tilemap.GetTile(tilePos) == steelWallTile)
                         continue;
                     else
                         tilemap.SetTile(tilePos, null);
                 }
-                
-                currentGrid[nx, ny].Reset();
-                
-                spawnCoins.Add(new Vector3Int(nx, ny));
+
+                if (currentGrid[nx, ny].visual != null)
+                {
+                    Destroy(currentGrid[nx, ny].visual);
+                }
+
+                nextGrid[nx, ny].Reset();
+
+                if (lootCoins)
+                {
+                    GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(nx, ny)), Quaternion.identity);
+                    nextGrid[nx, ny].type = CellType.Coin;
+                    nextGrid[nx, ny].isSolid = true;
+                    nextGrid[nx, ny].isDestructible = false;
+                    nextGrid[nx, ny].isFalling = false;
+                    nextGrid[nx, ny].visual = coin;
+                    nextGrid[nx, ny].isReserved = true;
+                }
             }
-        }
-        foreach (Vector3Int spawn in spawnCoins)
-        {
-            Debug.Log(spawn);
         }
     }
 

@@ -13,28 +13,24 @@ public class FallingObjectSystem
 
     public void Simulate(int x, int y)
     {
-        // 1. Priorité : Tomber tout droit
         if (CanFallDown(x, y))
         {
             grid.TryMove(x, y, 0, -1, true);
             return;
         }
 
-        // 2. Rouler à gauche puis tomber (en deux étapes)
         if (CanRollLeft(x, y))
         {
-            grid.TryMove(x, y, -1, 0, false);        // Glisse d'abord à gauche
+            grid.TryMove(x, y, -1, 0, false);
             return;
         }
 
-        // 3. Rouler à droite puis tomber
         if (CanRollRight(x, y))
         {
-            grid.TryMove(x, y, 1, 0, false);         // Glisse d'abord à droite
+            grid.TryMove(x, y, 1, 0, false);
             return;
         }
 
-        // Ne peut ni tomber ni rouler → reste sur place
         grid.CopyCurrentToNext(x, y);
     }
 

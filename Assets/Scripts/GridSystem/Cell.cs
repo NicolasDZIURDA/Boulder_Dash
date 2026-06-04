@@ -6,8 +6,8 @@ public class Cell
     public bool isSolid = false;
     public bool isDestructible = false;
     public bool isFalling = false;
-    public bool isReserved = false;
     public GameObject visual = null;
+    public bool isReserved = false;
 
     public void CopyFrom(Cell other)
     {
