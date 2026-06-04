@@ -43,21 +43,23 @@ public class FallingObjectSystem
 
     bool CanFallDown(int x, int y)
     {
-        return IsEmpty(x, y - 1);
+        return IsEmpty(x, y - 1) && !grid.IsReserved(x, y - 1);
     }
 
     bool CanRollLeft(int x, int y)
     {
         return IsEmpty(x - 1, y)
             && IsEmpty(x - 1, y - 1)
-            && IsAboveSupportToRoll(x, y);
+            && IsAboveSupportToRoll(x, y)
+            && !grid.IsReserved(x - 1, y);
     }
 
     bool CanRollRight(int x, int y)
     {
         return IsEmpty(x + 1, y)
             && IsEmpty(x + 1, y - 1)
-            && IsAboveSupportToRoll(x, y);
+            && IsAboveSupportToRoll(x, y)
+            && !grid.IsReserved(x + 1, y);
     }
 
     bool IsAboveSupportToRoll(int x, int y)

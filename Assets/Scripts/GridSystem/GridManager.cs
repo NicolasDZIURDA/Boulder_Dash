@@ -29,6 +29,7 @@ public class GridManager : MonoBehaviour
     private float timer;
     private bool explosionPending;
     private List<ExplosionEvent> pendingExplosions = new();
+    private Vector2Int previousPlayer;
     public bool gameOverPending = false;
     public int gameOverTimer = 0;
 
@@ -134,6 +135,18 @@ public class GridManager : MonoBehaviour
 
     void Tick()
     {
+        CheckGameOver();
+        ClearNextGrid();
+        CheckAllCrushes();
+        CheckEnemyCollision();
+        SimulateWorld();
+        CheckAndApplyExplosions();
+        SwapGrids();
+        RenderGrid();
+    }
+
+    void CheckGameOver()
+    {
         if (gameOverPending)
         {
             gameOverTimer--;
@@ -144,23 +157,6 @@ public class GridManager : MonoBehaviour
             }
             return;
         }
-
-        ClearNextGrid();
-        SimulateWorld();
-
-        if (explosionPending)
-        {
-            foreach (var pos in pendingExplosions)
-            {
-                TriggerExplosion(pos.x, pos.y, pos.lootCoins);
-            }
-
-            pendingExplosions.Clear();
-            explosionPending = false;
-        }
-
-        SwapGrids();
-        RenderGrid();
     }
 
     void ClearNextGrid()
@@ -203,8 +199,20 @@ public class GridManager : MonoBehaviour
                 }
             }
         }
-        CheckAllCrushes();
-        CheckEnemyCollision();
+    }
+
+    void CheckAndApplyExplosions()
+    {
+        if (explosionPending)
+        {
+            foreach (var pos in pendingExplosions)
+            {
+                TriggerExplosion(pos.x, pos.y, pos.lootCoins);
+            }
+
+            pendingExplosions.Clear();
+            explosionPending = false;
+        }
     }
 
     public bool TryMove(int x, int y, int dx, int dy, bool isFalling)
@@ -243,6 +251,7 @@ public class GridManager : MonoBehaviour
                 {
                     if (GetCell(x, y - 1).type == CellType.Player)
                     {
+                        ReserveCellsForExplosion(x, y - 1);
                         pendingExplosions.Add(new ExplosionEvent(x, y - 1, false));
                         explosionPending = true;
                         OnPlayerKilled();
@@ -251,6 +260,7 @@ public class GridManager : MonoBehaviour
                     {
                         Enemy enemy = currentGrid[x, y - 1].visual.GetComponent<Enemy>();
                         bool dropCoins = enemy.dropCoins;
+                        ReserveCellsForExplosion(x, y - 1);
                         pendingExplosions.Add(new ExplosionEvent(x, y - 1, dropCoins));
                         explosionPending = true;
                     }
@@ -265,10 +275,17 @@ public class GridManager : MonoBehaviour
         nextGrid[x, y].isFalling = false;
     }
 
+    public bool IsReserved(int x, int y)
+    {
+        return nextGrid[x, y].isReserved;
+    }
+
     // ==================== AUTRES SIMULATIONS ====================
     void SimulatePlayer(int x, int y)
     {
         Vector2Int move = inputController.MoveInput;
+
+        previousPlayer = new Vector2Int(x, y);
 
         if (move == Vector2Int.zero)
         {
@@ -287,7 +304,19 @@ public class GridManager : MonoBehaviour
             return;
         }
 
+        if (nextGrid[nx, ny].isReserved)
+        {
+            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+            return;
+        }
+
         if (currentGrid[nx, ny].type == CellType.Wall)
+        {
+            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+            return;
+        }
+
+        if (currentGrid[nx, ny].type == CellType.Enemy)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
             return;
@@ -334,30 +363,65 @@ public class GridManager : MonoBehaviour
         }
 
         nextGrid[nx, ny].CopyFrom(currentGrid[x, y]);
+        nextGrid[nx, ny].isReserved = true;
         nextGrid[x, y].Reset();
     }
-    
+
     void CheckEnemyCollision()
     {
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
+                if (currentGrid[x, y].type != CellType.Player)
+                    continue;
+
                 Cell cell = currentGrid[x, y];
-                Vector2Int? enemyDir = GetAdjacentTypeDirection(x, y, CellType.Enemy);
+                Vector2Int? enemyPos = GetAdjacentEnemyPosition(x, y);
 
-                if (currentGrid[x, y].type == CellType.Player && enemyDir is Vector2Int dirEnemy)
+                if (enemyPos is Vector2Int dirEnemy)
                 {
-                    int ex = x + dirEnemy.x;
-                    int ey = y + dirEnemy.y;
-
-                    Enemy enemy = currentGrid[ex, ey].visual.GetComponent<Enemy>();
+                    Enemy enemy = currentGrid[dirEnemy.x, dirEnemy.y].visual.GetComponent<Enemy>();
                     bool dropCoins = enemy != null && enemy.dropCoins;
-                    pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
-                    explosionPending = true;
-                    //TriggerExplosion(x, y, dropCoins);
-                    OnPlayerKilled();
-                    return;
+
+                    if (dirEnemy.x - x == 0 || dirEnemy.y - y == 0)     // Adjacent direct non diagonal
+                    {
+                        pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
+                        explosionPending = true;
+
+                        //TriggerExplosion(x, y, dropCoins);
+                        OnPlayerKilled();
+                        return;
+                    }
+                    else
+                    {
+                        Vector2Int playerMove = new Vector2Int(x - previousPlayer.x, y - previousPlayer.y);
+                        Vector2Int enemyMove = new Vector2Int(0, 0);
+                        switch (enemy.direction)
+                        {
+                            case Direction.Up:
+                                enemyMove = Vector2Int.up;
+                                break;
+                            case Direction.Left:
+                                enemyMove = Vector2Int.left;
+                                break;
+                            case Direction.Down:
+                                enemyMove = Vector2Int.down;
+                                break;
+                            case Direction.Right:
+                                enemyMove = Vector2Int.right;
+                                break;
+                        }
+                        if (playerMove == -enemyMove)
+                        {
+                            pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
+                            explosionPending = true;
+
+                            //TriggerExplosion(x, y, dropCoins);
+                            OnPlayerKilled();
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -396,11 +460,11 @@ public class GridManager : MonoBehaviour
             return;
         }
 
-        if (GetAdjacentTypeDirection(x, y, CellType.Player) != null)
-        {
-            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-            return;
-        }
+        //if (GetAdjacentTypeDirection(x, y, CellType.Player) != null)
+        //{
+        //    nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+        //    return;
+        //}
 
         // === DÉPLACEMENT ===
         nextGrid[nx, ny].CopyFrom(currentGrid[x, y]);
@@ -410,22 +474,18 @@ public class GridManager : MonoBehaviour
         enemy.MoveTo(new Vector3Int(nx, ny, 0), chosenDir);
     }
 
-    public Vector2Int? GetAdjacentTypeDirection(int x, int y, CellType type)
+    public Vector2Int? GetAdjacentEnemyPosition(int x, int y)
     {
-        Vector2Int[] dirs =
+        for (int dx = -1; dx <= 1; dx++)
         {
-            Vector2Int.up,
-            Vector2Int.down,
-            Vector2Int.left,
-            Vector2Int.right
-        };
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                int nx = x + dx;
+                int ny = y + dy;
 
-        foreach (Vector2Int dir in dirs)
-        {
-            Cell cell = GetCell(x + dir.x, y + dir.y);
-
-            if (cell != null && cell.type == type)
-                return dir;
+                if (currentGrid[nx, ny].type == CellType.Enemy)
+                    return new Vector2Int(nx, ny);
+            }
         }
 
         return null;
@@ -435,6 +495,19 @@ public class GridManager : MonoBehaviour
     {
         gameOverPending = true;
         gameOverTimer = 2;
+    }
+
+    public void ReserveCellsForExplosion(int x, int y)
+    {
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                int nx = x + dx;
+                int ny = y + dy;
+                nextGrid[nx, ny].isReserved = true;
+            }
+        }
     }
 
     public void TriggerExplosion(int x, int y, bool lootCoins)
@@ -467,9 +540,11 @@ public class GridManager : MonoBehaviour
                 if (currentGrid[nx, ny].visual != null)
                 {
                     Destroy(currentGrid[nx, ny].visual);
+                    //currentGrid[nx, ny].Reset();
+                    nextGrid[nx, ny].Reset();
                 }
 
-                nextGrid[nx, ny].Reset();
+                currentGrid[nx, ny].Reset();
 
                 if (lootCoins)
                 {
