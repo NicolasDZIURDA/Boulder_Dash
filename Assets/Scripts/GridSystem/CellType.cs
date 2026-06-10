@@ -1,10 +1,13 @@
 public enum CellType
 {
     Empty,
-    Wall,
     Dirt,
+    Wall,
     Rock,
     Coin,
     Enemy,
-    Player
+    WormSpawner,
+    Worm,
+    Player,
+    Door
 }

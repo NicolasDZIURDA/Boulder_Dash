@@ -15,19 +15,19 @@ public class FallingObjectSystem
     {
         if (CanFallDown(x, y))
         {
-            grid.TryMove(x, y, 0, -1, true);
+            AddIntent(x, y, 0, -1, true);
             return;
         }
 
         if (CanRollLeft(x, y))
         {
-            grid.TryMove(x, y, -1, 0, false);
+            AddIntent(x, y, -1, 0, false);
             return;
         }
 
         if (CanRollRight(x, y))
         {
-            grid.TryMove(x, y, 1, 0, false);
+            AddIntent(x, y, 1, 0, false);
             return;
         }
 
@@ -64,20 +64,32 @@ public class FallingObjectSystem
 
     bool IsAboveSupportToRoll(int x, int y)
     {
-        return grid.GetCell(x, y - 1).type == CellType.Rock ||
-            grid.GetCell(x, y - 1).type == CellType.Coin ||
-            grid.GetCell(x, y - 1).type == CellType.Wall;
+        return grid.GetCurrentCell(x, y - 1).type == CellType.Rock ||
+            grid.GetCurrentCell(x, y - 1).type == CellType.Coin ||
+            grid.GetCurrentCell(x, y - 1).type == CellType.Wall;
     }
 
     bool IsEmpty(int x, int y)
     {
-        return grid.IsInside(x, y) && grid.GetCell(x, y).type == CellType.Empty;
+        return grid.IsInside(x, y) && grid.GetCurrentCell(x, y).type == CellType.Empty;
     }
 
     bool IsPlayerOrEnemy(int x, int y)
     {
-        CellType type = grid.GetCell(x, y).type;
+        CellType type = grid.GetCurrentCell(x, y).type;
 
         return type == CellType.Player || type == CellType.Enemy;
+    }
+
+    void AddIntent(int x, int y, int dx, int dy, bool falling)
+    {
+        grid.intents.Add(new MoveIntent
+        {
+            from = new Vector2Int(x, y),
+            to = new Vector2Int(x + dx, y + dy),
+            type = grid.GetCurrentCell(x, y).type
+        });
+
+        grid.GetCurrentCell(x, y).isFalling = falling;
     }
 }
