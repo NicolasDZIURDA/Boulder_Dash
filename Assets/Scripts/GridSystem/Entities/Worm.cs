@@ -6,7 +6,7 @@ using UnityEngine.Tilemaps;
 public class Worm : MonoBehaviour
 {
     public Tilemap tilemap;
-    private GridManager gridManager;
+    private GridManager grid;
 
     public GameObject wormHeadPrefab;
     public GameObject wormBodyPrefab;
@@ -19,9 +19,9 @@ public class Worm : MonoBehaviour
     public List<GameObject> wormSegments = new List<GameObject>();
     public List<Vector3Int> positionHistory = new();
 
-    public void Init(GridManager gridManager, Tilemap tilemap)
+    public void Init(GridManager grid, Tilemap tilemap)
     {
-        this.gridManager = gridManager;
+        this.grid = grid;
         this.tilemap = tilemap;
     }
 
@@ -64,7 +64,7 @@ public class Worm : MonoBehaviour
         {
             wormSegments[i].SetActive(true);
 
-            yield return new WaitForSeconds(gridManager.tickRate);
+            yield return new WaitForSeconds(grid.tickRate);
         }
     }
 
@@ -104,19 +104,19 @@ public class Worm : MonoBehaviour
         cellPosition = tilemap.WorldToCell(transform.position);
         Vector3Int nextPos = cellPosition + DirectionTools.DirToVector(dir);
 
-        if (!gridManager.IsInside(nextPos.x, nextPos.y))
+        if (!grid.IsInside(nextPos.x, nextPos.y))
             return false;
 
-        Cell target = gridManager.GetCurrentCell(nextPos.x, nextPos.y);
+        Cell target = grid.GetCurrentCell(nextPos.x, nextPos.y);
         if (target == null) return false;
 
-        /*if (target.type == CellType.Rock)
+        if (target.type == CellType.Rock)
         {
             if (!isEvil)
             {
-                gridManager.TransformObject(nextPos);
+                //gridManager.TransformObject(nextPos);
             }
-        }*/
+        }
         
         if (target.type != CellType.Empty)
         {

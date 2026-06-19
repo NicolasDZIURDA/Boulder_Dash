@@ -7,7 +7,7 @@ public class Enemy : MonoBehaviour
 
     private float timer;
     private Tilemap tilemap;
-    private GridManager gridManager;
+    private GridManager grid;
 
     public Vector3Int cellPosition;
     public bool dropCoins = false;
@@ -15,7 +15,7 @@ public class Enemy : MonoBehaviour
     void Start()
     {
         tilemap = FindObjectOfType<Tilemap>();
-        gridManager = GridManager.Instance;
+        grid = GridManager.Instance;
 
         cellPosition = tilemap.WorldToCell(transform.position);
         transform.position = tilemap.GetCellCenterWorld(cellPosition);
@@ -42,10 +42,10 @@ public class Enemy : MonoBehaviour
     {
         Vector3Int nextPos = cellPosition + DirectionTools.DirToVector(dir);
 
-        if (!gridManager.IsInside(nextPos.x, nextPos.y))
+        if (!grid.IsInside(nextPos.x, nextPos.y))
             return false;
 
-        Cell target = gridManager.GetCurrentCell(nextPos.x, nextPos.y);
+        Cell target = grid.GetCurrentCell(nextPos.x, nextPos.y);
         if (target == null) return false;
 
         if (target.type != CellType.Empty)

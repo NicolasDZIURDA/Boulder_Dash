@@ -31,6 +31,7 @@ public class FallingObjectSystem
             return;
         }
 
+        //AddIntent(x, y, 0, 0, false);
         grid.CopyCurrentToNext(x, y);
     }
 
@@ -85,8 +86,8 @@ public class FallingObjectSystem
     {
         grid.intents.Add(new MoveIntent
         {
-            from = new Vector2Int(x, y),
-            to = new Vector2Int(x + dx, y + dy),
+            from = new Vector3Int(x, y),
+            to = new Vector3Int(x + dx, y + dy),
             type = grid.GetCurrentCell(x, y).type
         });
 
