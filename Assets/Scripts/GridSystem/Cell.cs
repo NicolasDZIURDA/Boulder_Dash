@@ -6,7 +6,10 @@ public class Cell
     public bool isSolid = false;
     public bool isFalling = false;
     public GameObject visual = null;
-    public bool isReserved = false;
+
+    public bool isReserved = false;     // utilisé dans des cas spécifiques
+
+    public WallType wallType;
 
     public void CopyFrom(Cell other)
     {

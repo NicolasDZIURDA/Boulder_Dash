@@ -44,7 +44,7 @@ public class FallingObjectSystem
 
     bool CanFallDown(int x, int y)
     {
-        return IsEmpty(x, y - 1) && !grid.IsReserved(x, y - 1);
+        return IsEmpty(x, y - 1) && !grid.GetCurrentCell(x, y - 1).isReserved;
     }
 
     bool CanRollLeft(int x, int y)
@@ -52,7 +52,7 @@ public class FallingObjectSystem
         return IsEmpty(x - 1, y)
             && IsEmpty(x - 1, y - 1)
             && IsAboveSupportToRoll(x, y)
-            && !grid.IsReserved(x - 1, y);
+            && !grid.GetCurrentCell(x - 1, y).isReserved;
     }
 
     bool CanRollRight(int x, int y)
@@ -60,14 +60,16 @@ public class FallingObjectSystem
         return IsEmpty(x + 1, y)
             && IsEmpty(x + 1, y - 1)
             && IsAboveSupportToRoll(x, y)
-            && !grid.IsReserved(x + 1, y);
+            && !grid.GetCurrentCell(x + 1, y).isReserved;
     }
 
     bool IsAboveSupportToRoll(int x, int y)
     {
         return grid.GetCurrentCell(x, y - 1).type == CellType.Rock ||
             grid.GetCurrentCell(x, y - 1).type == CellType.Coin ||
-            grid.GetCurrentCell(x, y - 1).type == CellType.Wall;
+            (grid.GetCurrentCell(x, y - 1).type == CellType.Wall &&
+            (grid.GetCurrentCell(x, y - 1).wallType == WallType.Brick ||
+            grid.GetCurrentCell(x, y - 1).wallType == WallType.Steel));
     }
 
     bool IsEmpty(int x, int y)

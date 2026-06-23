@@ -3,7 +3,7 @@ using UnityEngine.Tilemaps;
 
 public class Enemy : MonoBehaviour
 {
-    public Direction direction = Direction.Left;
+    public Direction direction = Direction.Right;
 
     private float timer;
     private Tilemap tilemap;
@@ -12,7 +12,12 @@ public class Enemy : MonoBehaviour
     public Vector3Int cellPosition;
     public bool dropCoins = false;
 
-    void Start()
+    public void Start()
+    {
+        Init();
+    }
+
+    public void Init()
     {
         tilemap = FindObjectOfType<Tilemap>();
         grid = GridManager.Instance;
@@ -29,11 +34,20 @@ public class Enemy : MonoBehaviour
         Direction right   = DirectionTools.TurnRight(direction);
         Direction back    = DirectionTools.Opposite(direction);
 
-        // Priorité : Gauche → Devant → Droite → Demi-tour
-        if (CanMove(left)) return left;
-        if (CanMove(forward)) return forward;
-        if (CanMove(right))   return right;
-        if (CanMove(back))    return back;
+        if (dropCoins)
+        {
+            if (CanMove(right)) return right;
+            if (CanMove(forward)) return forward;
+            if (CanMove(left)) return left;
+            if (CanMove(back)) return back;
+        }
+        else
+        {
+            if (CanMove(left)) return left;
+            if (CanMove(forward)) return forward;
+            if (CanMove(right)) return right;
+            if (CanMove(back)) return back;
+        }
 
         return forward; // fallback
     }
@@ -46,6 +60,7 @@ public class Enemy : MonoBehaviour
             return false;
 
         Cell target = grid.GetCurrentCell(nextPos.x, nextPos.y);
+        
         if (target == null) return false;
 
         if (target.type != CellType.Empty)

@@ -1,8 +1,8 @@
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.SceneManagement;
+using System.Collections.Generic;
+using System.Linq;
 
 public class GridManager : MonoBehaviour
 {
@@ -32,6 +32,8 @@ public class GridManager : MonoBehaviour
     private Cell[,] currentGrid;
     private Cell[,] nextGrid;
     public GameObject coinPrefab;
+    public GameObject rockPrefab;
+    public GameObject enemyPrefab;
     private int coins;
     private float timer;
     private bool explosionPending;
@@ -51,8 +53,17 @@ public class GridManager : MonoBehaviour
         InitGrid();
         InjectSceneObjects();
         fallingObjectSystem = new FallingObjectSystem(this);
+
+        int rockCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Rock");
+        Debug.Log($"Rocks : {rockCount}");
+        int coinCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Coin");
+        Debug.Log($"Coins : {coinCount}");
+        int bfCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Butterfly");
+        Debug.Log($"Butterflies : {bfCount}");
+        int ffCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Firefly");
+        Debug.Log($"Fireflies : {ffCount}");
     }
-    
+
     void Update()
     {
         timer += Time.deltaTime;
@@ -81,8 +92,16 @@ public class GridManager : MonoBehaviour
 
                 if (tile == dirtTile)
                     SetCell(currentGrid[x, y], CellType.Dirt, true);
-                else if (tile == brickWallTile || tile == steelWallTile || tile == growingWallTile || tile == magicWallTile || tile == slimeTile)
-                    SetCell(currentGrid[x, y], CellType.Wall, true);
+                else if (tile == brickWallTile)
+                    SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Brick);
+                else if (tile == steelWallTile)
+                    SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Steel);
+                else if (tile == slimeTile)
+                    SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Slime);
+                else if (tile == growingWallTile)
+                    SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Growing);
+                else if (tile == magicWallTile)
+                    SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Magic);
                 else
                     SetCell(currentGrid[x, y], CellType.Empty, false);
             }
@@ -126,10 +145,11 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    public void SetCell(Cell cell, CellType type, bool isSolid)
+    public void SetCell(Cell cell, CellType type, bool isSolid, WallType walltype = WallType.Default)
     {
         cell.type = type;
         cell.isSolid = isSolid;
+        cell.wallType = walltype;
     }
 
     // ==================== FONCTION CORE ====================
@@ -142,10 +162,10 @@ public class GridManager : MonoBehaviour
         CheckAllCrushes();
         CheckCollisionWithEnemy();
         ApplyExplosions();
-        
+
         SimulateWorld();
         ResolveIntents();
-        
+
         SwapGrids();
         RenderGrid();
     }
@@ -159,7 +179,7 @@ public class GridManager : MonoBehaviour
 
             if (gameOverTimer <= 0)
                 SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-            
+
             return;
         }
     }
@@ -288,6 +308,12 @@ public class GridManager : MonoBehaviour
                     case CellType.WormSpawner:
                     case CellType.Door:
                         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+                        switch (currentGrid[x, y].wallType)
+                        {
+                            case WallType.Growing:
+                                PerformGrowingWall(x, y);
+                                break;
+                        }
                         break;
                     case CellType.Worm:
                         SimulateWorm(x, y);
@@ -325,7 +351,7 @@ public class GridManager : MonoBehaviour
                 var candidates = group.Where(i => GetPriority(i.type) == maxPriority).ToList();
                 winner = candidates[Random.Range(0, candidates.Count)];
             }
-            
+
             nextGrid[winner.to.x, winner.to.y].CopyFrom(currentGrid[winner.from.x, winner.from.y]);
 
             if (winner.type == CellType.Enemy)
@@ -338,7 +364,7 @@ public class GridManager : MonoBehaviour
             {
                 Worm worm = currentGrid[winner.from.x, winner.from.y].visual.GetComponent<Worm>();
                 worm.UpdateHistory(new Vector3Int(winner.to.x, winner.to.y, 0));
-                
+
                 foreach (var cell in worm.positionHistory)
                 {
                     nextGrid[cell.x, cell.y].type = CellType.Worm;
@@ -346,12 +372,25 @@ public class GridManager : MonoBehaviour
                 }
             }
 
+            if (winner.type == CellType.Wall)   // pour le growing wall
+            {
+                nextGrid[winner.to.x, winner.to.y].type = CellType.Wall;
+                nextGrid[winner.to.x, winner.to.y].isSolid = true;
+                nextGrid[winner.to.x, winner.to.y].wallType = WallType.Growing;
+
+                Vector3Int tilePos = new Vector3Int(winner.to.x, winner.to.y, 0);
+
+                if (!tilemap.HasTile(tilePos))
+                    tilemap.SetTile(tilePos, growingWallTile);
+            }
+
             foreach (var loser in group)
             {
                 if (loser.from == winner.from)
                     continue;
-
-                nextGrid[loser.from.x, loser.from.y].CopyFrom(currentGrid[loser.from.x, loser.from.y]);
+                
+                if (loser.type != CellType.Wall)
+                    nextGrid[loser.from.x, loser.from.y].CopyFrom(currentGrid[loser.from.x, loser.from.y]);
             }
         }
     }
@@ -409,7 +448,7 @@ public class GridManager : MonoBehaviour
                     else
                         tilemap.SetTile(tilePos, null);
                 }
-                
+
                 if (currentGrid[nx, ny].visual != null)
                 {
                     Destroy(currentGrid[nx, ny].visual);
@@ -423,7 +462,6 @@ public class GridManager : MonoBehaviour
                     GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(nx, ny)), Quaternion.identity);
                     currentGrid[nx, ny].type = CellType.Coin;
                     currentGrid[nx, ny].isSolid = true;
-                    currentGrid[nx, ny].isFalling = false;
                     currentGrid[nx, ny].visual = coin;
                     nextGrid[nx, ny].isReserved = true;
                 }
@@ -455,9 +493,9 @@ public class GridManager : MonoBehaviour
 
         inputController.ConsumeInput();
 
-        if (!IsInside(nx, ny) 
-            || currentGrid[nx, ny].type == CellType.Wall 
-            || currentGrid[nx, ny].type == CellType.Enemy 
+        if (!IsInside(nx, ny)
+            || currentGrid[nx, ny].type == CellType.Wall
+            || currentGrid[nx, ny].type == CellType.Enemy
             || currentGrid[nx, ny].type == CellType.Worm)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
@@ -521,6 +559,13 @@ public class GridManager : MonoBehaviour
             }
         }
 
+        if (currentGrid[nx, ny].type == CellType.Dirt)
+        {
+            tilemap.SetTile(new Vector3Int(nx, ny, 0), null);
+            nextGrid[nx, ny].Reset();
+            currentGrid[nx, ny].Reset();
+        }
+
         if (currentGrid[nx, ny].type == CellType.Coin)
         {
             Destroy(currentGrid[nx, ny].visual);
@@ -528,12 +573,11 @@ public class GridManager : MonoBehaviour
             coins++;
             Debug.Log("Coins collected : " + coins);
         }
-
-        if (currentGrid[nx, ny].type == CellType.Dirt)
+        
+        if (currentGrid[nx, ny].type == CellType.Door)
         {
-            tilemap.SetTile(new Vector3Int(nx, ny, 0), null);
-            nextGrid[nx, ny].Reset();
-            currentGrid[nx, ny].Reset();
+            Debug.Log("You win !");
+            LevelManager.Instance.LoadNextLevel();
         }
 
         intents.Add(new MoveIntent
@@ -549,6 +593,7 @@ public class GridManager : MonoBehaviour
         if (currentGrid[x, y].visual == null) return;
 
         Enemy enemy = currentGrid[x, y].visual.GetComponent<Enemy>();
+
         if (enemy == null) return;
 
         Direction chosenDir = enemy.GetNextDirection();
@@ -568,7 +613,7 @@ public class GridManager : MonoBehaviour
         if (currentGrid[nx, ny].isSolid)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-            //enemy.ForceReverse();
+            enemy.ForceReverse();
             return;
         }
 
@@ -578,6 +623,28 @@ public class GridManager : MonoBehaviour
             to = new Vector3Int(nx, ny),
             type = CellType.Enemy
         });
+
+        nextGrid[x, y].Reset();
+    }
+
+    void TransformObjectIntoOther(GameObject newObj, int x, int y, CellType newType)
+    {
+        if (currentGrid[x, y].visual != null)
+        {
+            Destroy(currentGrid[x, y].visual);
+            currentGrid[x, y].Reset();
+            nextGrid[x, y].Reset();
+
+            GameObject obj = Instantiate(newObj, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
+
+            if (newObj == enemyPrefab)
+                obj.GetComponent<Enemy>().Init();
+
+            currentGrid[x, y].type = newType;
+            currentGrid[x, y].isSolid = true;
+            currentGrid[x, y].visual = obj;
+            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+        }   
     }
 
     void SimulateWorm(int x, int y)
@@ -594,20 +661,26 @@ public class GridManager : MonoBehaviour
 
         if (currentGrid[dx, dy].type == CellType.Rock)
         {
-            Destroy(currentGrid[dx, dy].visual);
-            currentGrid[dx, dy].Reset();
-            nextGrid[dx, dy].Reset();
-
-            if (!worm.isEvil)
+            if (worm.isEvil)
             {
-                GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(dx, dy)), Quaternion.identity);
-                currentGrid[dx, dy].type = CellType.Coin;
-                currentGrid[dx, dy].isSolid = true;
-                currentGrid[dx, dy].isFalling = false;
-                currentGrid[dx, dy].visual = coin;
-                nextGrid[dx, dy].CopyFrom(currentGrid[dx, dy]);
-                //nextGrid[dx, dy].isReserved = true;
+                TransformObjectIntoOther(enemyPrefab, dx, dy, CellType.Enemy);
             }
+            else
+            {
+                TransformObjectIntoOther(coinPrefab, dx, dy, CellType.Coin);
+            }
+        }
+
+        if (currentGrid[dx, dy].type == CellType.Coin && worm.isEvil)
+        {
+            TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock);
+        }
+
+        if (currentGrid[dx, dy].type == CellType.Enemy && !worm.isEvil)
+        {
+            Enemy enemy = currentGrid[dx, dy].visual.GetComponent<Enemy>();
+            if (!enemy.dropCoins)                                                   // Transforme uniquement les fireflies
+                TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock);
         }
 
         Direction chosenDir = worm.GetNextDirection();
@@ -689,11 +762,6 @@ public class GridManager : MonoBehaviour
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
-    public bool IsReserved(int x, int y)
-    {
-        return nextGrid[x, y].isReserved;
-    }
-
     public Cell GetCurrentCell(int x, int y)
     {
         if (!IsInside(x, y))
@@ -713,7 +781,7 @@ public class GridManager : MonoBehaviour
         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
         nextGrid[x, y].isFalling = false;
     }
-    
+
     public void RemoveIntentsToCell(int x, int y)
     {
         intents.RemoveAll(i =>
@@ -739,19 +807,6 @@ public class GridManager : MonoBehaviour
         return enemiesAdjacents;
     }
 
-    int GetPriority(CellType type)
-    {
-        return type switch
-        {
-            CellType.Rock => 10,
-            CellType.Coin => 10,
-            CellType.Worm => 8,
-            CellType.Player => 7,
-            CellType.Enemy => 6,
-            _ => 0
-        };
-    }
-
     void PerformGrowingWall(int x, int y)
     {
         if (!IsInside(x, y))
@@ -768,19 +823,29 @@ public class GridManager : MonoBehaviour
         if (!IsInside(x, y))
             return;
 
-        if (nextGrid[x, y].type != CellType.Empty)
-            return;
-
         if (currentGrid[x, y].type != CellType.Empty)
             return;
 
-        nextGrid[x, y].type = CellType.Wall;
-        nextGrid[x, y].isSolid = true;
+        intents.Add(new MoveIntent
+        {
+            from = new Vector3Int(x, y),
+            to = new Vector3Int(x, y),
+            type = CellType.Wall
+        });
+    }
 
-        Vector3Int tilePos = new Vector3Int(x, y, 0);
-
-        if (!tilemap.HasTile(tilePos))
-            tilemap.SetTile(tilePos, growingWallTile);
+    int GetPriority(CellType type)
+    {
+        return type switch
+        {
+            CellType.Rock => 10,
+            CellType.Coin => 10,
+            CellType.Worm => 8,
+            CellType.Player => 7,
+            CellType.Enemy => 6,
+            CellType.Wall => 5,
+            _ => 0
+        };
     }
 
     public void OnPlayerKilled()

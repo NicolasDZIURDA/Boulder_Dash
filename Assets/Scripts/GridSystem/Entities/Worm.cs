@@ -1,7 +1,7 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using System.Collections;
+using System.Collections.Generic;
 
 public class Worm : MonoBehaviour
 {
@@ -117,7 +117,7 @@ public class Worm : MonoBehaviour
                 //gridManager.TransformObject(nextPos);
             }
         }
-        
+
         if (target.type != CellType.Empty)
         {
             return false;
