@@ -1,16 +1,22 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
+public enum EnemyType
+{
+    Butterfly,
+    Firefly
+}
+
 public class Enemy : MonoBehaviour
 {
-    public Direction direction = Direction.Right;
+    public EnemyType enemyType;
+    public Direction direction = Direction.Left;
 
     private float timer;
     private Tilemap tilemap;
     private GridManager grid;
 
     public Vector3Int cellPosition;
-    public bool dropCoins = false;
 
     public void Start()
     {
@@ -29,12 +35,12 @@ public class Enemy : MonoBehaviour
 
     public Direction GetNextDirection()
     {
-        Direction left    = DirectionTools.TurnLeft(direction);
+        Direction left = DirectionTools.TurnLeft(direction);
         Direction forward = direction;
-        Direction right   = DirectionTools.TurnRight(direction);
-        Direction back    = DirectionTools.Opposite(direction);
+        Direction right = DirectionTools.TurnRight(direction);
+        Direction back = DirectionTools.Opposite(direction);
 
-        if (dropCoins)
+        if (enemyType == EnemyType.Butterfly)
         {
             if (CanMove(right)) return right;
             if (CanMove(forward)) return forward;
@@ -60,7 +66,7 @@ public class Enemy : MonoBehaviour
             return false;
 
         Cell target = grid.GetCurrentCell(nextPos.x, nextPos.y);
-        
+
         if (target == null) return false;
 
         if (target.type != CellType.Empty)

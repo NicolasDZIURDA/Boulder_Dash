@@ -9,15 +9,17 @@ public class GridManager : MonoBehaviour
     [Header("Grid Settings")]
     public int width = 32;
     public int height = 32;
-    public float tickRate = 1f;
+    public float tickRate = 0.1f;
 
     public static GridManager Instance;
     private FallingObjectSystem fallingObjectSystem;
-    public Worm wormPrefab;
+    public Worm goodWormPrefab;
+    public Worm evilWormPrefab;
     private Worm worm;
     public List<MoveIntent> intents = new List<MoveIntent>();
 
-    [Header("Tiles")]
+    [Header("Theme & Tiles")]
+    public ThemeData theme;
     public Tilemap tilemap;
     public TileBase dirtTile;
     public TileBase brickWallTile;
@@ -49,19 +51,20 @@ public class GridManager : MonoBehaviour
 
     void Start()
     {
+        theme = LevelManager.Instance.currentTheme;
         inputController = FindObjectOfType<Player>();
         InitGrid();
         InjectSceneObjects();
         fallingObjectSystem = new FallingObjectSystem(this);
 
         int rockCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Rock");
-        Debug.Log($"Rocks : {rockCount}");
+        //Debug.Log($"Rocks : {rockCount}");
         int coinCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Coin");
-        Debug.Log($"Coins : {coinCount}");
+        //Debug.Log($"Coins : {coinCount}");
         int bfCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Butterfly");
-        Debug.Log($"Butterflies : {bfCount}");
+        //Debug.Log($"Butterflies : {bfCount}");
         int ffCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Firefly");
-        Debug.Log($"Fireflies : {ffCount}");
+        //Debug.Log($"Fireflies : {ffCount}");
     }
 
     void Update()
@@ -90,35 +93,69 @@ public class GridManager : MonoBehaviour
                 Vector3Int pos = new Vector3Int(x, y, 0);
                 TileBase tile = tilemap?.GetTile(pos);
 
+                if (x == 4 && y == 14)
+                    Debug.Log(tilemap?.GetTile(new Vector3Int(4, 14, 0)));
+
                 if (tile == dirtTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Dirt, true);
+                    tilemap.SetTile(pos, theme.dirt);
+                }
                 else if (tile == brickWallTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Brick);
+                    tilemap.SetTile(pos, theme.brickWall);
+                }
                 else if (tile == steelWallTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Steel);
+                    tilemap.SetTile(pos, theme.steelWall);
+                }
                 else if (tile == slimeTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Slime);
+                    tilemap.SetTile(pos, theme.slime);
+                }
                 else if (tile == growingWallTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Growing);
+                    tilemap.SetTile(pos, theme.growingWall);
+                }
                 else if (tile == magicWallTile)
+                {
                     SetCell(currentGrid[x, y], CellType.Wall, true, WallType.Magic);
+                    tilemap.SetTile(pos, theme.magicWall);
+                }
                 else
                     SetCell(currentGrid[x, y], CellType.Empty, false);
             }
         }
     }
 
-    void InjectSceneObjects()
+    void ApplyTheme()
     {
-        InjectObjectsWithTag("Player", CellType.Player, true);
-        InjectObjectsWithTag("Rock", CellType.Rock, true);
-        InjectObjectsWithTag("Coin", CellType.Coin, true);
-        InjectObjectsWithTag("Enemy", CellType.Enemy, true);
-        InjectObjectsWithTag("WormSpawner", CellType.WormSpawner, true);
-        InjectObjectsWithTag("Door", CellType.Door, true);
+        ThemeData theme = LevelManager.Instance.currentTheme;
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                Vector3Int pos = new Vector3Int(x, y, 0);
+            }
+        }
     }
 
-    void InjectObjectsWithTag(string tag, CellType type, bool isSolid)
+    void InjectSceneObjects()
+    {
+        InjectObjectsWithTag("Player", CellType.Player, true, theme.player);
+        InjectObjectsWithTag("Rock", CellType.Rock, true, theme.rock);
+        InjectObjectsWithTag("Coin", CellType.Coin, true, theme.coin);
+        InjectObjectsWithTag("Enemy", CellType.Enemy, true, null);
+        InjectObjectsWithTag("WormSpawner", CellType.WormSpawner, true, null);
+        InjectObjectsWithTag("Door", CellType.Door, true, theme.door);
+    }
+
+    void InjectObjectsWithTag(string tag, CellType type, bool isSolid, Sprite sprite)
     {
         GameObject[] objects = GameObject.FindGameObjectsWithTag(tag);
 
@@ -141,6 +178,36 @@ public class GridManager : MonoBehaviour
 
                 currentGrid[x, y].visual = obj;
                 nextGrid[x, y].visual = obj;
+
+                SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
+                if (sr == null) continue;
+
+                if (tag == "Enemy")
+                {
+                    Enemy enemy = obj.GetComponent<Enemy>();
+                    if (enemy == null) return;
+
+                    sr.sprite = enemy.enemyType switch
+                    {
+                        EnemyType.Butterfly => theme.butterfly,
+                        EnemyType.Firefly => theme.firefly,
+                    };
+                }
+                else if (tag == "WormSpawner")
+                {
+                    WormSpawner wormSpawner = obj.GetComponent<WormSpawner>();
+                    if (wormSpawner == null) return;
+
+                    sr.sprite = wormSpawner.wormType switch
+                    {
+                        WormType.Good => theme.goodWormSpawn,
+                        WormType.Evil => theme.evilWormSpawn
+                    };
+                }
+                else
+                {
+                    sr.sprite = sprite;
+                }
             }
         }
     }
@@ -162,7 +229,7 @@ public class GridManager : MonoBehaviour
         CheckAllCrushes();
         CheckCollisionWithEnemy();
         ApplyExplosions();
-
+        
         SimulateWorld();
         ResolveIntents();
 
@@ -217,7 +284,7 @@ public class GridManager : MonoBehaviour
                     {
                         Enemy enemy = currentGrid[x, y - 1].visual.GetComponent<Enemy>();
                         ReserveCellsForExplosion(x, y - 1);
-                        pendingExplosions.Add(new ExplosionEvent(x, y - 1, enemy.dropCoins));
+                        pendingExplosions.Add(new ExplosionEvent(x, y - 1, enemy.enemyType == EnemyType.Butterfly));
                         explosionPending = true;
                     }
                 }
@@ -242,11 +309,11 @@ public class GridManager : MonoBehaviour
                     foreach (Vector2Int enemyPos in enemies)
                     {
                         Enemy enemy = currentGrid[enemyPos.x, enemyPos.y].visual.GetComponent<Enemy>();
-                        bool dropCoins = enemy != null && enemy.dropCoins;
+                        if (enemy == null) continue;
 
                         if (enemyPos.x - x == 0 || enemyPos.y - y == 0)     // Adjacent direct non diagonal
                         {
-                            pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
+                            pendingExplosions.Add(new ExplosionEvent(x, y, enemy.enemyType == EnemyType.Butterfly));
                             explosionPending = true;
                             OnPlayerKilled();
                             return;
@@ -272,7 +339,7 @@ public class GridManager : MonoBehaviour
                             }
                             if (playerMove == -enemyMove)
                             {
-                                pendingExplosions.Add(new ExplosionEvent(x, y, dropCoins));
+                                pendingExplosions.Add(new ExplosionEvent(x, y, enemy.enemyType == EnemyType.Butterfly));
                                 explosionPending = true;
                                 OnPlayerKilled();
                                 return;
@@ -381,7 +448,7 @@ public class GridManager : MonoBehaviour
                 Vector3Int tilePos = new Vector3Int(winner.to.x, winner.to.y, 0);
 
                 if (!tilemap.HasTile(tilePos))
-                    tilemap.SetTile(tilePos, growingWallTile);
+                    tilemap.SetTile(tilePos, theme.growingWall);
             }
 
             foreach (var loser in group)
@@ -443,7 +510,7 @@ public class GridManager : MonoBehaviour
 
                 if (tilemap.HasTile(tilePos))
                 {
-                    if (tilemap.GetTile(tilePos) == steelWallTile)
+                    if (tilemap.GetTile(tilePos) == theme.steelWall)
                         continue;
                     else
                         tilemap.SetTile(tilePos, null);
@@ -464,6 +531,8 @@ public class GridManager : MonoBehaviour
                     currentGrid[nx, ny].isSolid = true;
                     currentGrid[nx, ny].visual = coin;
                     nextGrid[nx, ny].isReserved = true;
+                    SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
+                    sr.sprite = theme.coin;
                 }
                 else
                 {
@@ -489,7 +558,7 @@ public class GridManager : MonoBehaviour
         int nx = x + move.x;
         int ny = y + move.y;
 
-        //Debug.Log(currentGrid[nx, ny].type);
+        //Debug.Log(nx + " " + ny + " : " + currentGrid[nx, ny].type);
 
         inputController.ConsumeInput();
 
@@ -506,6 +575,8 @@ public class GridManager : MonoBehaviour
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
 
+            WormSpawner spawner = currentGrid[nx, ny].visual.GetComponent<WormSpawner>();
+
             Destroy(currentGrid[nx, ny].visual);
             currentGrid[nx, ny].visual = null;
 
@@ -516,6 +587,8 @@ public class GridManager : MonoBehaviour
             }
 
             Vector3 worldPos = tilemap.GetCellCenterWorld(new Vector3Int(nx, ny, 0));
+
+            Worm wormPrefab = (spawner.wormType == WormType.Good) ? goodWormPrefab : evilWormPrefab;
 
             worm = Instantiate(wormPrefab, worldPos, Quaternion.identity);
             worm.Init(this, tilemap);
@@ -627,26 +700,6 @@ public class GridManager : MonoBehaviour
         nextGrid[x, y].Reset();
     }
 
-    void TransformObjectIntoOther(GameObject newObj, int x, int y, CellType newType)
-    {
-        if (currentGrid[x, y].visual != null)
-        {
-            Destroy(currentGrid[x, y].visual);
-            currentGrid[x, y].Reset();
-            nextGrid[x, y].Reset();
-
-            GameObject obj = Instantiate(newObj, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
-
-            if (newObj == enemyPrefab)
-                obj.GetComponent<Enemy>().Init();
-
-            currentGrid[x, y].type = newType;
-            currentGrid[x, y].isSolid = true;
-            currentGrid[x, y].visual = obj;
-            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-        }   
-    }
-
     void SimulateWorm(int x, int y)
     {
         if (currentGrid[x, y].visual == null) return;
@@ -661,26 +714,26 @@ public class GridManager : MonoBehaviour
 
         if (currentGrid[dx, dy].type == CellType.Rock)
         {
-            if (worm.isEvil)
+            if (worm.wormType == WormType.Good)
             {
-                TransformObjectIntoOther(enemyPrefab, dx, dy, CellType.Enemy);
+                TransformObjectIntoOther(coinPrefab, dx, dy, CellType.Coin, theme.coin);
             }
             else
             {
-                TransformObjectIntoOther(coinPrefab, dx, dy, CellType.Coin);
+                TransformObjectIntoOther(enemyPrefab, dx, dy, CellType.Enemy, theme.firefly);
             }
         }
 
-        if (currentGrid[dx, dy].type == CellType.Coin && worm.isEvil)
+        if (currentGrid[dx, dy].type == CellType.Coin && worm.wormType == WormType.Evil)
         {
-            TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock);
+            TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock, theme.rock);
         }
 
-        if (currentGrid[dx, dy].type == CellType.Enemy && !worm.isEvil)
+        if (currentGrid[dx, dy].type == CellType.Enemy && worm.wormType == WormType.Good)
         {
             Enemy enemy = currentGrid[dx, dy].visual.GetComponent<Enemy>();
-            if (!enemy.dropCoins)                                                   // Transforme uniquement les fireflies
-                TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock);
+            if (enemy.enemyType == EnemyType.Firefly)                                                   // Transforme uniquement les fireflies
+                TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock, theme.rock);
         }
 
         Direction chosenDir = worm.GetNextDirection();
@@ -731,6 +784,29 @@ public class GridManager : MonoBehaviour
             to = new Vector3Int(nx, ny),
             type = CellType.Worm
         });
+    }
+
+    void TransformObjectIntoOther(GameObject newObj, int x, int y, CellType newType, Sprite sprite)
+    {
+        if (currentGrid[x, y].visual != null)
+        {
+            Destroy(currentGrid[x, y].visual);
+            currentGrid[x, y].Reset();
+            nextGrid[x, y].Reset();
+
+            GameObject obj = Instantiate(newObj, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
+
+            if (newObj == enemyPrefab)
+                obj.GetComponent<Enemy>().Init();
+
+            currentGrid[x, y].type = newType;
+            currentGrid[x, y].isSolid = true;
+            currentGrid[x, y].visual = obj;
+            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+
+            SpriteRenderer sr = newObj.GetComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+        }   
     }
 
     // ==================== CHANGEMENT DE GRILLE ET RENDU ====================

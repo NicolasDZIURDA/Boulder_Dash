@@ -3,6 +3,13 @@ using UnityEngine.Tilemaps;
 using System.Collections;
 using System.Collections.Generic;
 
+public enum WormPart
+{
+    Head,
+    Body,
+    Tail
+}
+
 public class Worm : MonoBehaviour
 {
     public Tilemap tilemap;
@@ -13,7 +20,7 @@ public class Worm : MonoBehaviour
     public GameObject wormTailPrefab;
     public Direction direction = Direction.Right;
     public Vector3Int cellPosition;
-    public bool isEvil = false;
+    public WormType wormType;
 
     private int wormLength = 8;
     public List<GameObject> wormSegments = new List<GameObject>();
@@ -36,6 +43,7 @@ public class Worm : MonoBehaviour
         positionHistory.Clear();
 
         wormSegments.Add(gameObject);
+        ApplyTheme(gameObject, WormPart.Head);
 
         for (int i = 0; i < wormLength - 1; i++)    // la tête est créée depuis le grid managers
         {
@@ -45,8 +53,9 @@ public class Worm : MonoBehaviour
                 (i == wormLength - 2) ? wormTailPrefab : wormBodyPrefab;
 
             GameObject segment = Instantiate(prefab, worldPos, Quaternion.identity);
+            segment.SetActive(false);
 
-            segment.SetActive(false);   // avant le spawn
+            ApplyTheme(segment, (i == wormLength - 2) ? WormPart.Tail : WormPart.Body);
 
             wormSegments.Add(segment);
         }
@@ -110,14 +119,6 @@ public class Worm : MonoBehaviour
         Cell target = grid.GetCurrentCell(nextPos.x, nextPos.y);
         if (target == null) return false;
 
-        if (target.type == CellType.Rock)
-        {
-            if (!isEvil)
-            {
-                //gridManager.TransformObject(nextPos);
-            }
-        }
-
         if (target.type != CellType.Empty)
         {
             return false;
@@ -142,6 +143,37 @@ public class Worm : MonoBehaviour
                 Vector3 worldPos = tilemap.GetCellCenterWorld(positionHistory[i]);
                 wormSegments[i].transform.position = worldPos;
             }
+        }
+    }
+
+    void ApplyTheme(GameObject segment, WormPart part)
+    {
+        SpriteRenderer sr = segment.GetComponent<SpriteRenderer>();
+
+        ThemeData theme = LevelManager.Instance.currentTheme;
+
+        switch (part)
+        {
+            case WormPart.Head:
+                if (wormType == WormType.Good)
+                    sr.sprite = theme.goodWormHead;
+                else
+                    sr.sprite = theme.evilWormHead;
+                break;
+            
+            case WormPart.Body:
+                if (wormType == WormType.Good)
+                    sr.sprite = theme.goodWormBody;
+                else
+                    sr.sprite = theme.evilWormBody;
+                break;
+
+            case WormPart.Tail:
+                if (wormType == WormType.Good)
+                    sr.sprite = theme.goodWormTail;
+                else
+                    sr.sprite = theme.evilWormTail;
+                break;
         }
     }
 }
