@@ -93,9 +93,6 @@ public class GridManager : MonoBehaviour
                 Vector3Int pos = new Vector3Int(x, y, 0);
                 TileBase tile = tilemap?.GetTile(pos);
 
-                if (x == 4 && y == 14)
-                    Debug.Log(tilemap?.GetTile(new Vector3Int(4, 14, 0)));
-
                 if (tile == dirtTile)
                 {
                     SetCell(currentGrid[x, y], CellType.Dirt, true);
@@ -212,7 +209,7 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    public void SetCell(Cell cell, CellType type, bool isSolid, WallType walltype = WallType.Default)
+    public void SetCell(Cell cell, CellType type, bool isSolid, WallType walltype = WallType.None)
     {
         cell.type = type;
         cell.isSolid = isSolid;
@@ -298,8 +295,7 @@ public class GridManager : MonoBehaviour
         {
             for (int y = 0; y < height; y++)
             {
-                if (currentGrid[x, y].type != CellType.Player)
-                    continue;
+                if (currentGrid[x, y].type != CellType.Player) continue;
 
                 Cell cell = currentGrid[x, y];
                 List<Vector2Int>? enemies = GetAdjacentEnemyPosition(x, y);
@@ -377,6 +373,9 @@ public class GridManager : MonoBehaviour
                         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
                         switch (currentGrid[x, y].wallType)
                         {
+                            case WallType.Slime:
+                                PerformSlimePattern(x, y);
+                                break;
                             case WallType.Growing:
                                 PerformGrowingWall(x, y);
                                 break;
@@ -420,11 +419,13 @@ public class GridManager : MonoBehaviour
             }
 
             nextGrid[winner.to.x, winner.to.y].CopyFrom(currentGrid[winner.from.x, winner.from.y]);
+            nextGrid[winner.from.x, winner.from.y].Reset();
 
             if (winner.type == CellType.Enemy)
             {
                 Enemy enemy = currentGrid[winner.from.x, winner.from.y].visual.GetComponent<Enemy>();
-                enemy.MoveTo(new Vector3Int(winner.to.x, winner.to.y, 0), DirectionTools.VectorToDir(winner.to - winner.from));
+                if (enemy != null)
+                    enemy.MoveTo(new Vector3Int(winner.to.x, winner.to.y, 0), DirectionTools.VectorToDir(winner.to - winner.from));
             }
 
             if (winner.type == CellType.Worm)
@@ -453,9 +454,8 @@ public class GridManager : MonoBehaviour
 
             foreach (var loser in group)
             {
-                if (loser.from == winner.from)
-                    continue;
-                
+                if (loser.from == winner.from) continue;
+
                 if (loser.type != CellType.Wall)
                     nextGrid[loser.from.x, loser.from.y].CopyFrom(currentGrid[loser.from.x, loser.from.y]);
             }
@@ -500,8 +500,7 @@ public class GridManager : MonoBehaviour
                 int nx = x + dx;
                 int ny = y + dy;
 
-                if (!IsInside(nx, ny))
-                    continue;
+                if (!IsInside(nx, ny)) continue;
 
                 if (currentGrid[nx, ny].type == CellType.Player)
                     OnPlayerKilled();
@@ -557,8 +556,6 @@ public class GridManager : MonoBehaviour
 
         int nx = x + move.x;
         int ny = y + move.y;
-
-        //Debug.Log(nx + " " + ny + " : " + currentGrid[nx, ny].type);
 
         inputController.ConsumeInput();
 
@@ -710,18 +707,12 @@ public class GridManager : MonoBehaviour
         int dx = x + DirectionTools.DirToVector(worm.direction).x;
         int dy = y + DirectionTools.DirToVector(worm.direction).y;
 
-        //Debug.Log("Worm go to : " + dx + " " + dy);
-
         if (currentGrid[dx, dy].type == CellType.Rock)
         {
             if (worm.wormType == WormType.Good)
-            {
                 TransformObjectIntoOther(coinPrefab, dx, dy, CellType.Coin, theme.coin);
-            }
             else
-            {
                 TransformObjectIntoOther(enemyPrefab, dx, dy, CellType.Enemy, theme.firefly);
-            }
         }
 
         if (currentGrid[dx, dy].type == CellType.Coin && worm.wormType == WormType.Evil)
@@ -732,8 +723,13 @@ public class GridManager : MonoBehaviour
         if (currentGrid[dx, dy].type == CellType.Enemy && worm.wormType == WormType.Good)
         {
             Enemy enemy = currentGrid[dx, dy].visual.GetComponent<Enemy>();
-            if (enemy.enemyType == EnemyType.Firefly)                                                   // Transforme uniquement les fireflies
+            if (enemy.enemyType == EnemyType.Firefly)                                   // Transforme uniquement les fireflies
+            {
                 TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock, theme.rock);
+                intents.RemoveAll(i =>
+                    i.from.x == dx &&
+                    i.from.y == dy);
+            }
         }
 
         Direction chosenDir = worm.GetNextDirection();
@@ -742,8 +738,7 @@ public class GridManager : MonoBehaviour
         int nx = x + dirVec.x;
         int ny = y + dirVec.y;
 
-        if (!IsInside(nx, ny)
-            || currentGrid[nx, ny].isSolid)
+        if (!IsInside(nx, ny) || currentGrid[nx, ny].isSolid)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
             return;
@@ -858,13 +853,6 @@ public class GridManager : MonoBehaviour
         nextGrid[x, y].isFalling = false;
     }
 
-    public void RemoveIntentsToCell(int x, int y)
-    {
-        intents.RemoveAll(i =>
-            i.to.x == x &&
-            i.to.y == y);
-    }
-
     public List<Vector2Int>? GetAdjacentEnemyPosition(int x, int y)
     {
         List<Vector2Int> enemiesAdjacents = new();
@@ -883,10 +871,31 @@ public class GridManager : MonoBehaviour
         return enemiesAdjacents;
     }
 
+    void PerformSlimePattern(int x, int y)
+    {
+        if (!IsInside(x, y)) return;
+
+        if (currentGrid[x, y - 1].type != CellType.Empty) return;
+        if (currentGrid[x, y + 1].type != CellType.Rock && currentGrid[x, y + 1].type != CellType.Coin) return;
+
+        Cell cell = currentGrid[x, y];
+
+        if (Random.value > 0.99)
+        {
+            intents.Add(new MoveIntent
+            {
+                from = new Vector3Int(x, y + 1),
+                to = new Vector3Int(x, y - 1),
+                type = currentGrid[x, y + 1].type
+            });
+            
+            currentGrid[x, y + 1].isFalling = true;
+        }
+    }
+
     void PerformGrowingWall(int x, int y)
     {
-        if (!IsInside(x, y))
-            return;
+        if (!IsInside(x, y)) return;
 
         Cell cell = currentGrid[x, y];
 
@@ -896,11 +905,9 @@ public class GridManager : MonoBehaviour
 
     void TryGrowInto(int x, int y)
     {
-        if (!IsInside(x, y))
-            return;
+        if (!IsInside(x, y)) return;
 
-        if (currentGrid[x, y].type != CellType.Empty)
-            return;
+        if (currentGrid[x, y].type != CellType.Empty) return;
 
         intents.Add(new MoveIntent
         {
