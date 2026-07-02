@@ -6,10 +6,9 @@ public class Cell
     public bool isSolid = false;
     public bool isFalling = false;
     public GameObject visual = null;
+    public WallType wallType;
 
     public bool isReserved = false;     // utilisé dans des cas spécifiques
-
-    public WallType wallType;
 
     public void CopyFrom(Cell other)
     {
@@ -17,6 +16,7 @@ public class Cell
         isSolid = other.isSolid;
         isFalling = other.isFalling;
         visual = other.visual;
+        wallType = other.wallType;
     }
 
     public void Reset()
@@ -25,5 +25,6 @@ public class Cell
         isSolid = false;
         isFalling = false;
         visual = null;
+        wallType = WallType.None;
     }
 }

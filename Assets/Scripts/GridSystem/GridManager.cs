@@ -41,6 +41,8 @@ public class GridManager : MonoBehaviour
     private bool explosionPending;
     private List<ExplosionEvent> pendingExplosions = new();
     private Vector2Int previousPlayer;
+    private bool magicWallActivated = false;
+    private int magicWallTime = 0;
     public bool gameOverPending = false;
     public int gameOverTimer = 0;
 
@@ -232,6 +234,17 @@ public class GridManager : MonoBehaviour
 
         SwapGrids();
         RenderGrid();
+
+        if (magicWallActivated)     // gestion du temps d'activation du magic wall
+        {
+            Debug.Log(magicWallTime);
+            magicWallTime += 1;
+
+            if (magicWallTime >= 600)
+            {
+                magicWallActivated = false;
+            }
+        }
     }
 
     // ==================== CHECK EN PRE SIMULATION ====================
@@ -378,6 +391,9 @@ public class GridManager : MonoBehaviour
                                 break;
                             case WallType.Growing:
                                 PerformGrowingWall(x, y);
+                                break;
+                            case WallType.Magic:
+                                PerformMagicWall(x, y);
                                 break;
                         }
                         break;
@@ -915,6 +931,56 @@ public class GridManager : MonoBehaviour
             to = new Vector3Int(x, y),
             type = CellType.Wall
         });
+    }
+
+    void PerformMagicWall(int x, int y)
+    {
+        if (!IsInside(x, y)) return;
+
+        if (currentGrid[x, y + 1].type != CellType.Rock && currentGrid[x, y + 1].type != CellType.Coin) return;
+
+        if (!magicWallActivated)
+        {
+            if (magicWallTime < 60)
+                magicWallActivated = true;
+        }
+
+        if (magicWallActivated)
+        {
+            if (currentGrid[x, y + 1].type == CellType.Rock)
+            {
+                Destroy(currentGrid[x, y + 1].visual);
+                nextGrid[x, y + 1].Reset();
+
+                if (currentGrid[x, y - 1].type == CellType.Empty)
+                {
+                    GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y - 1)), Quaternion.identity);
+                    currentGrid[x, y - 1].type = CellType.Coin;
+                    currentGrid[x, y - 1].isSolid = true;
+                    currentGrid[x, y - 1].visual = coin;
+                    nextGrid[x, y - 1].isReserved = true;
+                    SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
+                    sr.sprite = theme.coin;
+                }
+            }
+
+            if (currentGrid[x, y + 1].type == CellType.Coin)
+            {
+                Destroy(currentGrid[x, y + 1].visual);
+                nextGrid[x, y + 1].Reset();
+
+                if (currentGrid[x, y - 1].type == CellType.Empty)
+                {
+                    GameObject rock = Instantiate(rockPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y - 1)), Quaternion.identity);
+                    currentGrid[x, y - 1].type = CellType.Rock;
+                    currentGrid[x, y - 1].isSolid = true;
+                    currentGrid[x, y - 1].visual = rock;
+                    nextGrid[x, y - 1].isReserved = true;
+                    SpriteRenderer sr = rock.GetComponent<SpriteRenderer>();
+                    sr.sprite = theme.rock;
+                }
+            }
+        }
     }
 
     int GetPriority(CellType type)
