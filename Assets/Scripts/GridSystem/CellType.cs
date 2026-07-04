@@ -8,6 +8,7 @@ public enum CellType
     Enemy,
     WormSpawner,
     Worm,
+    Amoeba,
     Player,
     Door
 }
