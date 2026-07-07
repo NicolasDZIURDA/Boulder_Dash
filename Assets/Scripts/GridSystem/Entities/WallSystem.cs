@@ -68,7 +68,7 @@ public class WallSystem : MonoBehaviour
 
         if (grid.GetCurrentCell(x, y - 1).type == CellType.Empty)
         {
-            grid.SpawnCell(newType, x, y - 1);
+            grid.TransformIntoObject(newType, x, y - 1);
         }
     }
 

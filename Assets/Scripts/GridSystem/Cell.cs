@@ -9,6 +9,7 @@ public class Cell
     public WallType wallType;
 
     public bool isReserved = false;     // utilisé dans des cas spécifiques
+    public bool justSpawned = false;    // pour éviter instantiation et simulation au même tick
 
     public void CopyFrom(Cell other)
     {

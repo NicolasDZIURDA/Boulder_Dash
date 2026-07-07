@@ -736,14 +736,14 @@ public class GridManager : MonoBehaviour
         if (currentGrid[dx, dy].type == CellType.Rock)
         {
             if (worm.wormType == WormType.Good)
-                TransformObjectIntoOther(coinPrefab, dx, dy, CellType.Coin, theme.coin);
+                TransformIntoObject(CellType.Coin, dx, dy);
             else
-                TransformObjectIntoOther(enemyPrefab, dx, dy, CellType.Enemy, theme.firefly);
+                TransformIntoObject(CellType.Enemy, dx, dy);
         }
 
         if (currentGrid[dx, dy].type == CellType.Coin && worm.wormType == WormType.Evil)
         {
-            TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock, theme.rock);
+            TransformIntoObject(CellType.Rock, dx, dy);
         }
 
         if (currentGrid[dx, dy].type == CellType.Enemy && worm.wormType == WormType.Good)
@@ -751,7 +751,7 @@ public class GridManager : MonoBehaviour
             Enemy enemy = currentGrid[dx, dy].visual.GetComponent<Enemy>();
             if (enemy.enemyType == EnemyType.Firefly)                                   // Transforme uniquement les fireflies
             {
-                TransformObjectIntoOther(rockPrefab, dx, dy, CellType.Rock, theme.rock);
+                TransformIntoObject(CellType.Rock, dx, dy);
                 intents.RemoveAll(i =>
                     i.from.x == dx &&
                     i.from.y == dy);
@@ -807,25 +807,48 @@ public class GridManager : MonoBehaviour
         });
     }
 
-    void TransformObjectIntoOther(GameObject newObj, int x, int y, CellType newType, Sprite sprite)
+    public void TransformIntoObject(CellType type, int x, int y)
     {
+        GameObject prefab = null;
+        Sprite sprite = null;
+
+        switch (type)
+        {
+            case CellType.Rock:
+                prefab = rockPrefab;
+                sprite = theme.rock;
+                break;
+
+            case CellType.Coin:
+                prefab = coinPrefab;
+                sprite = theme.coin;
+                break;
+
+            case CellType.Enemy:
+                prefab = enemyPrefab;
+                sprite = theme.firefly;
+                break;
+        }
+
         if (currentGrid[x, y].visual != null)
         {
             Destroy(currentGrid[x, y].visual);
             currentGrid[x, y].Reset();
+        }
 
-            GameObject obj = Instantiate(newObj, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
+        GameObject obj = Instantiate(prefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0)), Quaternion.identity);
 
-            if (newObj == enemyPrefab)
+        if (prefab == enemyPrefab)
                 obj.GetComponent<Enemy>().Init();
 
-            currentGrid[x, y].type = newType;
-            currentGrid[x, y].isSolid = true;
-            currentGrid[x, y].visual = obj;
-            nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+        currentGrid[x, y].type = type;
+        currentGrid[x, y].isSolid = true;
+        currentGrid[x, y].visual = obj;
+        currentGrid[x, y].justSpawned = true;
+        nextGrid[x, y].isReserved = true;
+        nextGrid[x, y].CopyFrom(currentGrid[x, y]);
 
-            obj.GetComponent<SpriteRenderer>().sprite = sprite;
-        }   
+        obj.GetComponent<SpriteRenderer>().sprite = sprite;
     }
 
     // ==================== CHANGEMENT DE GRILLE ET RENDU ====================
@@ -890,43 +913,19 @@ public class GridManager : MonoBehaviour
                 for (int y = 0; y < height; y++)
                 {
                     if (currentGrid[x, y].type == CellType.Amoeba)
-                    {
-                        currentGrid[x, y].Reset();
-                        Vector3Int tilePos = new Vector3Int(x, y, 0);
-                        tilemap.SetTile(tilePos, null);
-                        GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
-                        currentGrid[x, y].type = CellType.Coin;
-                        currentGrid[x, y].isSolid = true;
-                        currentGrid[x, y].visual = coin;
-                        nextGrid[x, y].isReserved = true;
-                        SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
-                        sr.sprite = theme.coin;
-
-                    }
+                        TransformAmoeba(coinPrefab, x, y, CellType.Coin, theme.coin);
                 }
             }
         }
 
-        if (CountAmoeba() > 10)
+        if (CountAmoeba() > 50)
         {
             for (int x = 0; x < width; x++)
             {
                 for (int y = 0; y < height; y++)
                 {
                     if (currentGrid[x, y].type == CellType.Amoeba)
-                    {
-                        currentGrid[x, y].Reset();
-                        Vector3Int tilePos = new Vector3Int(x, y, 0);
-                        tilemap.SetTile(tilePos, null);
-                        GameObject rock = Instantiate(rockPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y)), Quaternion.identity);
-                        currentGrid[x, y].type = CellType.Rock;
-                        currentGrid[x, y].isSolid = true;
-                        currentGrid[x, y].visual = rock;
-                        nextGrid[x, y].isReserved = true;
-                        SpriteRenderer sr = rock.GetComponent<SpriteRenderer>();
-                        sr.sprite = theme.rock;
-
-                    }
+                        TransformAmoeba(rockPrefab, x, y, CellType.Rock, theme.rock);
                 }
             }
         }
@@ -950,6 +949,21 @@ public class GridManager : MonoBehaviour
         return count;
     }
 
+    void TransformAmoeba(GameObject newObj, int x, int y, CellType type, Sprite sprite)
+    {
+        currentGrid[x, y].Reset();
+
+        Vector3Int tilePos = new Vector3Int(x, y, 0);
+        tilemap.SetTile(tilePos, null);
+        
+        GameObject obj = Instantiate(newObj, tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0)), Quaternion.identity);
+        currentGrid[x, y].type = type;
+        currentGrid[x, y].isSolid = true;
+        currentGrid[x, y].visual = obj;
+        nextGrid[x, y].isReserved = true;
+        obj.GetComponent<SpriteRenderer>().sprite = sprite;
+    }
+
     bool IsAmoebaEnclosed()
     {
         for (int x = 0; x < width; x++)
@@ -969,8 +983,7 @@ public class GridManager : MonoBehaviour
 
     bool IsFree(int x, int y)
     {
-        if (!IsInside(x, y))
-            return false;
+        if (!IsInside(x, y)) return false;
 
         return currentGrid[x, y].type == CellType.Empty || currentGrid[x, y].type == CellType.Dirt;
     }
@@ -1017,34 +1030,6 @@ public class GridManager : MonoBehaviour
         }
 
         return enemiesAdjacents;
-    }
-
-    public void SpawnCell(CellType type, int x, int y)
-    {
-        GameObject prefab = null;
-        Sprite sprite = null;
-
-        switch (type)
-        {
-            case CellType.Rock:
-                prefab = rockPrefab;
-                sprite = theme.rock;
-                break;
-
-            case CellType.Coin:
-                prefab = coinPrefab;
-                sprite = theme.coin;
-                break;
-        }
-
-        GameObject obj = Instantiate(prefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0)), Quaternion.identity);
-
-        currentGrid[x, y].type = type;
-        currentGrid[x, y].isSolid = true;
-        currentGrid[x, y].visual = obj;
-        nextGrid[x, y].isReserved = true;
-
-        obj.GetComponent<SpriteRenderer>().sprite = sprite;
     }
 
     int GetPriority(CellType type)
