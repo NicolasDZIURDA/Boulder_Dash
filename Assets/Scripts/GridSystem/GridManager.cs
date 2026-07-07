@@ -13,6 +13,8 @@ public class GridManager : MonoBehaviour
 
     public static GridManager Instance;
     private FallingObjectSystem fallingObjectSystem;
+    private WallSystem wallSystem;
+    private AmoebaSystem amoebaSystem;
     public Worm goodWormPrefab;
     public Worm evilWormPrefab;
     private Worm worm;
@@ -63,6 +65,8 @@ public class GridManager : MonoBehaviour
         InjectSceneObjects();
         inputController = FindObjectOfType<Player>();
         fallingObjectSystem = new FallingObjectSystem(this);
+        wallSystem = new WallSystem(this);
+        amoebaSystem = new AmoebaSystem(this);
 
         int rockCount = FindObjectsOfType<GameObject>().Count(go => go.name == "Rock");
         //Debug.Log($"Rocks : {rockCount}");
@@ -376,13 +380,13 @@ public class GridManager : MonoBehaviour
                         switch (currentGrid[x, y].wallType)
                         {
                             case WallType.Slime:
-                                PerformSlimePattern(x, y);
+                                wallSystem.PerformSlimePattern(x, y);
                                 break;
                             case WallType.Growing:
-                                PerformGrowingWall(x, y);
+                                wallSystem.PerformGrowingWall(x, y);
                                 break;
                             case WallType.Magic:
-                                PerformMagicWall(x, y);
+                                wallSystem.PerformMagicWall(x, y);
                                 break;
                         }
                         break;
@@ -391,7 +395,7 @@ public class GridManager : MonoBehaviour
                         break;
                     case CellType.Amoeba:
                         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-                        PerformAmoeba(x, y);
+                        amoebaSystem.PerformAmoeba(x, y);
                         break;
                 }
             }
@@ -470,8 +474,6 @@ public class GridManager : MonoBehaviour
 
                 if (!tilemap.HasTile(tilePos) || tilemap.GetTile(tilePos) == theme.dirt)
                     tilemap.SetTile(tilePos, theme.amoeba);
-
-                //Debug.Log(winner.to.x + " " + winner.to.y + " : " + currentGrid[winner.to.x, winner.to.y].isSolid + " / " + nextGrid[winner.to.x, winner.to.y].isSolid);
             }
 
             foreach (var loser in group)
@@ -531,10 +533,11 @@ public class GridManager : MonoBehaviour
 
                 if (tilemap.HasTile(tilePos))
                 {
-                    if (tilemap.GetTile(tilePos) == theme.steelWall)
-                        continue;
-                    else
+                    if (tilemap.GetTile(tilePos) != theme.steelWall)
+                    {
                         tilemap.SetTile(tilePos, null);
+                        currentGrid[nx, ny].Reset();
+                    }
                 }
 
                 if (currentGrid[nx, ny].visual != null)
@@ -848,20 +851,36 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    // ==================== VERIFICATION MAGIC WALL ET AMOEBA ====================
+    // ==================== MAGIC WALL CHECK ====================
     void CheckMagicWallTime()
     {
         if (magicWallActivated)
         {
             magicWallTime += 1;
 
-            if (magicWallTime >= 600)
+            if (magicWallTime >= 10)
             {
                 magicWallActivated = false;
             }
         }
     }
 
+    public bool IsMagicWallActivated()
+    {
+        return magicWallActivated;
+    }
+
+    public int GetMagicWallTime()
+    {
+        return magicWallTime;
+    }
+
+    public void ActivateMagicWall()
+    {
+        magicWallActivated = true;
+    }
+
+    // ==================== AMOEBA CHECK ====================
     void CheckAmoebaSize()
     {
         if (IsAmoebaEnclosed())
@@ -887,8 +906,8 @@ public class GridManager : MonoBehaviour
                 }
             }
         }
-        
-        if (CountAmoeba() > 50)    // gestion amoeba
+
+        if (CountAmoeba() > 10)
         {
             for (int x = 0; x < width; x++)
             {
@@ -910,130 +929,6 @@ public class GridManager : MonoBehaviour
                     }
                 }
             }
-        }
-    }
-
-    // ==================== APPLICATION DU SLIME / GROWING / MAGIC WALL ====================
-    void PerformSlimePattern(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        if (currentGrid[x, y - 1].type != CellType.Empty) return;
-        if (currentGrid[x, y + 1].type != CellType.Rock && currentGrid[x, y + 1].type != CellType.Coin) return;
-
-        Cell cell = currentGrid[x, y];
-
-        if (Random.value > 0.99)
-        {
-            intents.Add(new MoveIntent
-            {
-                from = new Vector3Int(x, y + 1),
-                to = new Vector3Int(x, y - 1),
-                type = currentGrid[x, y + 1].type
-            });
-            
-            currentGrid[x, y + 1].isFalling = true;
-        }
-    }
-
-    void PerformGrowingWall(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        Cell cell = currentGrid[x, y];
-
-        TryGrowInto(x - 1, y);
-        TryGrowInto(x + 1, y);
-    }
-
-    void TryGrowInto(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        if (currentGrid[x, y].type != CellType.Empty) return;
-
-        intents.Add(new MoveIntent
-        {
-            from = new Vector3Int(x, y),
-            to = new Vector3Int(x, y),
-            type = CellType.Wall
-        });
-    }
-
-    void PerformMagicWall(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        if (currentGrid[x, y + 1].type != CellType.Rock && currentGrid[x, y + 1].type != CellType.Coin) return;
-
-        if (!magicWallActivated)
-        {
-            if (magicWallTime < 60)
-                magicWallActivated = true;
-        }
-
-        if (magicWallActivated)
-        {
-            if (currentGrid[x, y + 1].type == CellType.Rock)
-            {
-                Destroy(currentGrid[x, y + 1].visual);
-                nextGrid[x, y + 1].Reset();
-
-                if (currentGrid[x, y - 1].type == CellType.Empty)
-                {
-                    GameObject coin = Instantiate(coinPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y - 1)), Quaternion.identity);
-                    currentGrid[x, y - 1].type = CellType.Coin;
-                    currentGrid[x, y - 1].isSolid = true;
-                    currentGrid[x, y - 1].visual = coin;
-                    nextGrid[x, y - 1].isReserved = true;
-                    SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
-                    sr.sprite = theme.coin;
-                }
-            }
-
-            if (currentGrid[x, y + 1].type == CellType.Coin)
-            {
-                Destroy(currentGrid[x, y + 1].visual);
-                nextGrid[x, y + 1].Reset();
-
-                if (currentGrid[x, y - 1].type == CellType.Empty)
-                {
-                    GameObject rock = Instantiate(rockPrefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y - 1)), Quaternion.identity);
-                    currentGrid[x, y - 1].type = CellType.Rock;
-                    currentGrid[x, y - 1].isSolid = true;
-                    currentGrid[x, y - 1].visual = rock;
-                    nextGrid[x, y - 1].isReserved = true;
-                    SpriteRenderer sr = rock.GetComponent<SpriteRenderer>();
-                    sr.sprite = theme.rock;
-                }
-            }
-        }
-    }
-
-    void PerformAmoeba(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        TryGrowAmoeba(x, y + 1);
-        TryGrowAmoeba(x + 1, y);
-        TryGrowAmoeba(x, y - 1);
-        TryGrowAmoeba(x - 1, y);
-    }
-
-    void TryGrowAmoeba(int x, int y)
-    {
-        if (!IsInside(x, y)) return;
-
-        if (currentGrid[x, y].type != CellType.Empty && currentGrid[x, y].type != CellType.Dirt) return;
-
-        if (Random.value > 0.99)
-        {
-            intents.Add(new MoveIntent
-            {
-                from = new Vector3Int(x, y),
-                to = new Vector3Int(x, y),
-                type = CellType.Amoeba
-            });
         }
     }
 
@@ -1122,6 +1017,34 @@ public class GridManager : MonoBehaviour
         }
 
         return enemiesAdjacents;
+    }
+
+    public void SpawnCell(CellType type, int x, int y)
+    {
+        GameObject prefab = null;
+        Sprite sprite = null;
+
+        switch (type)
+        {
+            case CellType.Rock:
+                prefab = rockPrefab;
+                sprite = theme.rock;
+                break;
+
+            case CellType.Coin:
+                prefab = coinPrefab;
+                sprite = theme.coin;
+                break;
+        }
+
+        GameObject obj = Instantiate(prefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0)), Quaternion.identity);
+
+        currentGrid[x, y].type = type;
+        currentGrid[x, y].isSolid = true;
+        currentGrid[x, y].visual = obj;
+        nextGrid[x, y].isReserved = true;
+
+        obj.GetComponent<SpriteRenderer>().sprite = sprite;
     }
 
     int GetPriority(CellType type)
