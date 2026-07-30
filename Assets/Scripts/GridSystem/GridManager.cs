@@ -46,8 +46,8 @@ public class GridManager : MonoBehaviour
     private bool explosionPending;
     private List<ExplosionEvent> pendingExplosions = new();
     private Vector2Int previousPlayer;
-    private bool magicWallActivated = false;
-    private int magicWallTime = 0;
+    public bool magicWallActivated = false;
+    public int magicWallTime = 0;
     private int countAmoeba = 0;
     public bool gameOverPending = false;
     public int gameOverTimer = 0;
@@ -182,7 +182,18 @@ public class GridManager : MonoBehaviour
                 SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
                 if (sr == null) continue;
 
-                if (tag == "Enemy")
+                if (tag == "Coin")
+                {
+                    Coin coin = obj.GetComponent<Coin>();
+                    if (coin == null) return;
+
+                    sr.sprite = coin.coinType switch
+                    {
+                        CoinType.Normal => theme.coin,
+                        CoinType.Shiny => theme.shinyCoin,
+                    };
+                }
+                else if (tag == "Enemy")
                 {
                     Enemy enemy = obj.GetComponent<Enemy>();
                     if (enemy == null) return;
@@ -227,7 +238,7 @@ public class GridManager : MonoBehaviour
         CheckGameOver();
         ClearNextGrid();
         CheckAllCrushes();
-        CheckCollisionWithEnemy();
+        CheckEnemyCollisions();
         ApplyExplosions();
         
         SimulateWorld();
@@ -295,13 +306,13 @@ public class GridManager : MonoBehaviour
         }
     }
 
-    void CheckCollisionWithEnemy()
+    void CheckEnemyCollisions()
     {
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                if (currentGrid[x, y].type != CellType.Player) continue;
+                if (currentGrid[x, y].type != CellType.Player && currentGrid[x, y].type != CellType.Amoeba) continue;
 
                 Cell cell = currentGrid[x, y];
                 List<Vector2Int>? enemies = GetAdjacentEnemyPosition(x, y);
@@ -315,36 +326,41 @@ public class GridManager : MonoBehaviour
 
                         if (enemyPos.x - x == 0 || enemyPos.y - y == 0)     // Adjacent direct non diagonal
                         {
-                            pendingExplosions.Add(new ExplosionEvent(x, y, enemy.enemyType == EnemyType.Butterfly));
+                            Vector2Int explosionPos = currentGrid[x, y].type == CellType.Player ? new Vector2Int(x, y) : enemyPos;    // définir le centre de l'explosion
+                            pendingExplosions.Add(new ExplosionEvent(explosionPos.x, explosionPos.y, enemy.enemyType == EnemyType.Butterfly));
                             explosionPending = true;
-                            OnPlayerKilled();
+                            if (currentGrid[x, y].type == CellType.Player)
+                                OnPlayerKilled();
                             return;
                         }
                         else    // On ajoute une collision si l'ennemi et le joueur se croise en diagonale
                         {
-                            Vector2Int playerMove = new Vector2Int(x - previousPlayer.x, y - previousPlayer.y);
-                            Vector2Int enemyMove = new Vector2Int(0, 0);
-                            switch (enemy.direction)
+                            if (currentGrid[x, y].type == CellType.Player)
                             {
-                                case Direction.Up:
-                                    enemyMove = Vector2Int.up;
-                                    break;
-                                case Direction.Left:
-                                    enemyMove = Vector2Int.left;
-                                    break;
-                                case Direction.Down:
-                                    enemyMove = Vector2Int.down;
-                                    break;
-                                case Direction.Right:
-                                    enemyMove = Vector2Int.right;
-                                    break;
-                            }
-                            if (playerMove == -enemyMove)
-                            {
-                                pendingExplosions.Add(new ExplosionEvent(x, y, enemy.enemyType == EnemyType.Butterfly));
-                                explosionPending = true;
-                                OnPlayerKilled();
-                                return;
+                                Vector2Int playerMove = new Vector2Int(x - previousPlayer.x, y - previousPlayer.y);
+                                Vector2Int enemyMove = new Vector2Int(0, 0);
+                                switch (enemy.direction)
+                                {
+                                    case Direction.Up:
+                                        enemyMove = Vector2Int.up;
+                                        break;
+                                    case Direction.Left:
+                                        enemyMove = Vector2Int.left;
+                                        break;
+                                    case Direction.Down:
+                                        enemyMove = Vector2Int.down;
+                                        break;
+                                    case Direction.Right:
+                                        enemyMove = Vector2Int.right;
+                                        break;
+                                }
+                                if (playerMove == -enemyMove)
+                                {
+                                    pendingExplosions.Add(new ExplosionEvent(x, y, enemy.enemyType == EnemyType.Butterfly));
+                                    explosionPending = true;
+                                    OnPlayerKilled();
+                                    return;
+                                }
                             }
                         }
                     }
@@ -380,7 +396,7 @@ public class GridManager : MonoBehaviour
                         switch (currentGrid[x, y].wallType)
                         {
                             case WallType.Slime:
-                                wallSystem.PerformSlimePattern(x, y);
+                                wallSystem.PerformSlime(x, y);
                                 break;
                             case WallType.Growing:
                                 wallSystem.PerformGrowingWall(x, y);
@@ -533,19 +549,18 @@ public class GridManager : MonoBehaviour
 
                 if (tilemap.HasTile(tilePos))
                 {
-                    if (tilemap.GetTile(tilePos) != theme.steelWall)
-                    {
+                    if (tilemap.GetTile(tilePos) == theme.steelWall)
+                        continue;
+                    else
                         tilemap.SetTile(tilePos, null);
-                        currentGrid[nx, ny].Reset();
-                    }
                 }
 
                 if (currentGrid[nx, ny].visual != null)
                 {
                     Destroy(currentGrid[nx, ny].visual);
-                    currentGrid[nx, ny].Reset();
                 }
 
+                currentGrid[nx, ny].Reset();
                 nextGrid[nx, ny].Reset();
 
                 if (lootCoins)
@@ -554,6 +569,7 @@ public class GridManager : MonoBehaviour
                     currentGrid[nx, ny].type = CellType.Coin;
                     currentGrid[nx, ny].isSolid = true;
                     currentGrid[nx, ny].visual = coin;
+                    currentGrid[nx, ny].justSpawned = true;
                     nextGrid[nx, ny].isReserved = true;
                     SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
                     sr.sprite = theme.coin;
@@ -839,7 +855,7 @@ public class GridManager : MonoBehaviour
         GameObject obj = Instantiate(prefab, tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0)), Quaternion.identity);
 
         if (prefab == enemyPrefab)
-                obj.GetComponent<Enemy>().Init();
+            obj.GetComponent<Enemy>().Init();
 
         currentGrid[x, y].type = type;
         currentGrid[x, y].isSolid = true;
@@ -881,26 +897,11 @@ public class GridManager : MonoBehaviour
         {
             magicWallTime += 1;
 
-            if (magicWallTime >= 10)
+            if (magicWallTime >= 600)
             {
                 magicWallActivated = false;
             }
         }
-    }
-
-    public bool IsMagicWallActivated()
-    {
-        return magicWallActivated;
-    }
-
-    public int GetMagicWallTime()
-    {
-        return magicWallTime;
-    }
-
-    public void ActivateMagicWall()
-    {
-        magicWallActivated = true;
     }
 
     // ==================== AMOEBA CHECK ====================

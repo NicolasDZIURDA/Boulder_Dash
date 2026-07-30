@@ -11,6 +11,7 @@ public class ThemeData : ScriptableObject
     public Sprite player;
     public Sprite rock;
     public Sprite coin;
+    public Sprite shinyCoin;
     public Tile dirt;
     public Sprite butterfly;
     public Sprite butterfly2;

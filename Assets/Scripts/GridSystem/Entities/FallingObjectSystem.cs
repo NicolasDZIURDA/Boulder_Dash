@@ -77,13 +77,6 @@ public class FallingObjectSystem
         return grid.IsInside(x, y) && grid.GetCurrentCell(x, y).type == CellType.Empty;
     }
 
-    bool IsPlayerOrEnemy(int x, int y)
-    {
-        CellType type = grid.GetCurrentCell(x, y).type;
-
-        return type == CellType.Player || type == CellType.Enemy;
-    }
-
     void AddIntent(int x, int y, int dx, int dy, bool falling)
     {
         grid.intents.Add(new MoveIntent
