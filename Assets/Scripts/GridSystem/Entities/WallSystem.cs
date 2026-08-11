@@ -14,7 +14,6 @@ public class WallSystem : MonoBehaviour
     {
         if (!grid.IsInside(x, y)) return;
 
-        if (grid.GetCurrentCell(x, y + 1).justSpawned) return;
         if (grid.GetCurrentCell(x, y - 1).type != CellType.Empty) return;
         if (grid.GetCurrentCell(x, y + 1).type != CellType.Rock && grid.GetCurrentCell(x, y + 1).type != CellType.Coin) return;
 
@@ -26,8 +25,6 @@ public class WallSystem : MonoBehaviour
     public void PerformGrowingWall(int x, int y)
     {
         if (!grid.IsInside(x, y)) return;
-
-        if (grid.GetCurrentCell(x, y + 1).justSpawned) return;
 
         TryGrowInto(x - 1, y);
         TryGrowInto(x + 1, y);
@@ -42,11 +39,10 @@ public class WallSystem : MonoBehaviour
         AddIntent(x, y, x, y, CellType.Wall, false);
     }
 
-    public void PerformMagicWall(int x, int y)  // todo : empêcher l'intent de déplacement du nouvel objet créé
+    public void PerformMagicWall(int x, int y)
     {
         if (!grid.IsInside(x, y)) return;
 
-        if (grid.GetCurrentCell(x, y + 1).justSpawned) return;
         if (grid.GetCurrentCell(x, y + 1).type != CellType.Rock && grid.GetCurrentCell(x, y + 1).type != CellType.Coin) return;
 
         if (!grid.magicWallActivated)
@@ -55,7 +51,7 @@ public class WallSystem : MonoBehaviour
                 grid.magicWallActivated = true;
         }
         
-        if (grid.magicWallActivated)    // pas de else pour passer ici lors de l'activation
+        if (grid.magicWallActivated)    // Pas de else pour passer ici lors de l'activation
         {
             if (grid.GetCurrentCell(x, y + 1).type == CellType.Rock)
                 TransformFallingObject(x, y, CellType.Coin);

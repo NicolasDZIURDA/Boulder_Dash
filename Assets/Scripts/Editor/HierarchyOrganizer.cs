@@ -10,26 +10,22 @@ public static class HierarchyOrganizer
         GameObject coinsParent = GetOrCreateParent("Coins");
         GameObject enemiesParent = GetOrCreateParent("Enemies");
         GameObject wormsParent = GetOrCreateParent("Worms");
-        GameObject playerParent = GetOrCreateParent("Player");
 
         foreach (GameObject go in Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None))
         {
-            // Ignore les objets cachés ou les parents eux-mêmes
-            if (go.transform.parent != null)
-                continue;
-
             if (go == rocksParent ||
                 go == coinsParent ||
                 go == enemiesParent ||
-                go == wormsParent ||
-                go == playerParent)
+                go == wormsParent)
                 continue;
+
+            RenameObject(go);
 
             if (go.name.StartsWith("Rock"))
             {
                 go.transform.SetParent(rocksParent.transform);
             }
-            else if (go.name.StartsWith("Coin"))
+            else if (go.name.StartsWith("Coin") || go.name.StartsWith("ShinyCoin"))
             {
                 go.transform.SetParent(coinsParent.transform);
             }
@@ -47,19 +43,33 @@ public static class HierarchyOrganizer
         SortChildrenAlphabetically(coinsParent);
         SortChildrenAlphabetically(enemiesParent);
         SortChildrenAlphabetically(wormsParent);
-        SortChildrenAlphabetically(playerParent);
+
+        UpdateFolderName(rocksParent, "Rocks");
+        UpdateFolderName(coinsParent, "Coins");
+        UpdateFolderName(enemiesParent, "Enemies");
+        UpdateFolderName(wormsParent, "Worms");
 
         Debug.Log("Hiérarchie réorganisée.");
     }
 
-    static GameObject GetOrCreateParent(string parentName)
+    static GameObject GetOrCreateParent(string baseName)
     {
-        GameObject parent = GameObject.Find(parentName);
+        foreach (GameObject go in Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None))
+        {
+            if (go.transform.parent != null)
+                continue;
 
-        if (parent == null)
-            parent = new GameObject(parentName);
+            string cleanName = go.name;
 
-        return parent;
+            int index = cleanName.IndexOf(" (");
+            if (index >= 0)
+                cleanName = cleanName.Substring(0, index);
+
+            if (cleanName == baseName)
+                return go;
+        }
+
+        return new GameObject(baseName);
     }
 
     static void SortChildrenAlphabetically(GameObject parent)
@@ -78,5 +88,31 @@ public static class HierarchyOrganizer
         {
             children[i].SetSiblingIndex(i);
         }
+    }
+
+    static void RenameObject(GameObject go)
+    {
+        if (go.name.StartsWith("Rock"))
+        {
+            go.name = "Rock";
+        }
+        else if (go.name.StartsWith("Coin"))
+        {
+            go.name = "Coin";
+        }
+        else if (go.name.StartsWith("Butterfly"))
+        {
+            go.name = "Butterfly";
+        }
+        else if (go.name.StartsWith("Firefly"))
+        {
+            go.name = "Firefly";
+        }
+    }
+
+    static void UpdateFolderName(GameObject folder, string baseName)
+    {
+        int count = folder.transform.childCount;
+        folder.name = $"{baseName} ({count})";
     }
 }

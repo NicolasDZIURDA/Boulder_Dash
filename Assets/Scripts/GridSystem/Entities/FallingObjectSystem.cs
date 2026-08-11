@@ -12,20 +12,20 @@ public class FallingObjectSystem
     }
 
     public void Simulate(int x, int y)
-    {   
-        if (CanFallDown(x, y) && !grid.GetCurrentCell(x, y).justSpawned)
+    {
+        if (CanFallDown(x, y))
         {
             AddIntent(x, y, 0, -1, true);
             return;
         }
 
-        if (CanRollLeft(x, y) && !grid.GetCurrentCell(x, y).justSpawned)
+        if (CanRollLeft(x, y))
         {
             AddIntent(x, y, -1, 0, false);
             return;
         }
 
-        if (CanRollRight(x, y) && !grid.GetCurrentCell(x, y).justSpawned)
+        if (CanRollRight(x, y))
         {
             AddIntent(x, y, 1, 0, false);
             return;

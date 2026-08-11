@@ -46,6 +46,7 @@ public class GridManager : MonoBehaviour
     private bool explosionPending;
     private List<ExplosionEvent> pendingExplosions = new();
     private Vector2Int previousPlayer;
+    private int wormSpawnTime = 0;
     public bool magicWallActivated = false;
     public int magicWallTime = 0;
     private int countAmoeba = 0;
@@ -86,6 +87,9 @@ public class GridManager : MonoBehaviour
             timer = 0f;
             Tick();
         }
+
+        if (Input.GetKeyDown(KeyCode.R))    // Suicide du joueur
+            OnPlayerKilled();
     }
 
     // ==================== SET UP ET INJECTION DES ELEMENTS DE LA SCENE ====================
@@ -247,6 +251,7 @@ public class GridManager : MonoBehaviour
         SwapGrids();
         RenderGrid();
 
+        IncrementWormSpawnTime();
         CheckMagicWallTime();
         CheckAmoebaSize();
     }
@@ -388,9 +393,13 @@ public class GridManager : MonoBehaviour
                     case CellType.Enemy:
                         SimulateEnemy(x, y);
                         break;
+                    case CellType.WormSpawner:
+                        nextGrid[x, y].CopyFrom(currentGrid[x, y]);
+                        if (wormSpawnTime == 200)
+                            SpawnWorm(x, y);
+                        break;
                     case CellType.Dirt:
                     case CellType.Wall:
-                    case CellType.WormSpawner:
                     case CellType.Door:
                         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
                         switch (currentGrid[x, y].wallType)
@@ -469,7 +478,7 @@ public class GridManager : MonoBehaviour
                 }
             }
 
-            if (winner.type == CellType.Wall)   // pour le growing wall
+            if (winner.type == CellType.Wall)   // Pour le growing wall
             {
                 nextGrid[winner.to.x, winner.to.y].type = CellType.Wall;
                 nextGrid[winner.to.x, winner.to.y].isSolid = true;
@@ -569,7 +578,6 @@ public class GridManager : MonoBehaviour
                     currentGrid[nx, ny].type = CellType.Coin;
                     currentGrid[nx, ny].isSolid = true;
                     currentGrid[nx, ny].visual = coin;
-                    currentGrid[nx, ny].justSpawned = true;
                     nextGrid[nx, ny].isReserved = true;
                     SpriteRenderer sr = coin.GetComponent<SpriteRenderer>();
                     sr.sprite = theme.coin;
@@ -613,34 +621,7 @@ public class GridManager : MonoBehaviour
         if (currentGrid[nx, ny].type == CellType.WormSpawner)
         {
             nextGrid[x, y].CopyFrom(currentGrid[x, y]);
-
-            WormSpawner spawner = currentGrid[nx, ny].visual.GetComponent<WormSpawner>();
-
-            Destroy(currentGrid[nx, ny].visual);
-            currentGrid[nx, ny].visual = null;
-
-            if (nextGrid[nx, ny].visual != null)
-            {
-                Destroy(nextGrid[nx, ny].visual);
-                nextGrid[nx, ny].visual = null;
-            }
-
-            Vector3 worldPos = tilemap.GetCellCenterWorld(new Vector3Int(nx, ny, 0));
-
-            Worm wormPrefab = (spawner.wormType == WormType.Good) ? goodWormPrefab : evilWormPrefab;
-
-            worm = Instantiate(wormPrefab, worldPos, Quaternion.identity);
-            worm.Init(this, tilemap);
-            worm.BuildWorm();
-            worm.StartSpawn();
-            worm.UpdateHistory(new Vector3Int(nx, ny, 0));
-
-            currentGrid[nx, ny].Reset();    // au cas où le wormspawner est simulé après le player
-            nextGrid[nx, ny].Reset();
-            nextGrid[nx, ny].type = CellType.Worm;
-            nextGrid[nx, ny].isSolid = true;
-            nextGrid[nx, ny].visual = worm.gameObject;
-
+            SpawnWorm(nx, ny);
             return;
         }
 
@@ -685,7 +666,7 @@ public class GridManager : MonoBehaviour
             coins++;
             Debug.Log("Coins collected : " + coins);
         }
-        
+
         if (currentGrid[nx, ny].type == CellType.Door)
         {
             Debug.Log("You win !");
@@ -860,11 +841,42 @@ public class GridManager : MonoBehaviour
         currentGrid[x, y].type = type;
         currentGrid[x, y].isSolid = true;
         currentGrid[x, y].visual = obj;
-        currentGrid[x, y].justSpawned = true;
         nextGrid[x, y].isReserved = true;
         nextGrid[x, y].CopyFrom(currentGrid[x, y]);
 
         obj.GetComponent<SpriteRenderer>().sprite = sprite;
+    }
+
+    void SpawnWorm(int x, int y)
+    {
+        WormSpawner spawner = currentGrid[x, y].visual.GetComponent<WormSpawner>();
+
+        Destroy(currentGrid[x, y].visual);
+        currentGrid[x, y].visual = null;
+
+        if (nextGrid[x, y].visual != null)
+        {
+            Destroy(nextGrid[x, y].visual);
+            nextGrid[x, y].visual = null;
+        }
+
+        Vector3 worldPos = tilemap.GetCellCenterWorld(new Vector3Int(x, y, 0));
+
+        Worm wormPrefab = (spawner.wormType == WormType.Good) ? goodWormPrefab : evilWormPrefab;
+
+        worm = Instantiate(wormPrefab, worldPos, Quaternion.identity);
+        worm.Init(this, tilemap);
+        worm.BuildWorm();
+        worm.StartSpawn();
+        worm.UpdateHistory(new Vector3Int(x, y, 0));
+
+        currentGrid[x, y].Reset();    // Cas où le wormspawner est simulé après le player
+        nextGrid[x, y].Reset();
+        nextGrid[x, y].type = CellType.Worm;
+        nextGrid[x, y].isSolid = true;
+        nextGrid[x, y].visual = worm.gameObject;
+
+        return;
     }
 
     // ==================== CHANGEMENT DE GRILLE ET RENDU ====================
@@ -888,6 +900,13 @@ public class GridManager : MonoBehaviour
                 }
             }
         }
+    }
+
+    // ==================== WORM SPAWN INCREMENTATION ====================
+    void IncrementWormSpawnTime()
+    {
+        if (wormSpawnTime < 200)
+            wormSpawnTime += 1;
     }
 
     // ==================== MAGIC WALL CHECK ====================

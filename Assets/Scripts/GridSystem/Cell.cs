@@ -8,8 +8,7 @@ public class Cell
     public GameObject visual = null;
     public WallType wallType;
 
-    public bool isReserved = false;     // utilisé dans des cas spécifiques
-    public bool justSpawned = false;    // pour éviter instantiation et simulation au même tick
+    public bool isReserved = false;     // Utilisé dans des cas spécifiques
 
     public void CopyFrom(Cell other)
     {
